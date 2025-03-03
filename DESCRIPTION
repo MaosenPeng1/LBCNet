@@ -27,7 +27,8 @@ Imports:
     tidyr,
     methods,
     tidyselect,
-    utils
+    utils,
+    rlang
 Suggests: 
     testthat (>= 3.0.0),
     MASS

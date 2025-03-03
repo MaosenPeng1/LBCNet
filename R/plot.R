@@ -66,6 +66,8 @@ utils::globalVariables(c("x", "y"))
 #' @importFrom tidyr pivot_longer
 #' @importFrom dplyr mutate filter %>%
 #' @importFrom tidyselect everything
+#' @importFrom rlang %||%
+#'
 #' @export
 plot.lsd <- function(x, y = NULL, cov = "ALL", ...) {
 

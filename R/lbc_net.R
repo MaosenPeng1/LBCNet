@@ -310,6 +310,7 @@
 #'
 #' @importFrom stats na.fail model.frame model.response model.matrix glm
 #' @importFrom reticulate source_python
+#' @importFrom rlang %||%
 #'
 #' @export
 lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
