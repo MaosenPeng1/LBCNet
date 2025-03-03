@@ -6,3 +6,5 @@
 *.tar.gz
 *.Rcheck
 __pycache__
+.Rproj.user/
+LBCNet.Rproj
