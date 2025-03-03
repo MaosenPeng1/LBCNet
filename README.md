@@ -143,10 +143,10 @@ If all commands execute without errors and display package versions, the install
 ## Install LBCNet
 
 ```r
-devtools::install_github("your_github_username/LBCNet")
+devtools::install_github("MaosenPeng1/LBCNet")
 ```
 Or
 
 ```r
-remotes::install_github("your_github_username/LBCNet")
+remotes::install_github("MaosenPeng1/LBCNet")
 ```
