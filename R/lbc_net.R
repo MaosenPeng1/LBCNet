@@ -321,23 +321,23 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   args <- list(...)
 
   # Extract optional kernel weighting parameters
-  ck <- args$ck %||% NULL
+  ck <- if (!is.null(args$ck)) args$ck else NULL
   h <- if ("h" %in% names(args)) args$h else NULL
-  kernel <- args$kernel %||% "gaussian"
+  kernel <- if (!is.null(args$kernel)) args$kernel else "gaussian"
 
   # Extract NN model tuning parameters
-  seed <- args$seed %||% 100
-  hidden_dim <- args$hidden_dim %||% 100
-  num_hidden_layers <- args$num_hidden_layers %||% 1
-  vae_epochs <- args$vae_epochs %||% 250
-  vae_lr <- args$vae_lr %||% 0.01
-  max_epochs <- args$max_epochs %||% 5000
-  lr <- args$lr %||% 0.05
-  weight_decay <- args$weight_decay %||% 1e-5
-  balance_lambda <- args$balance_lambda %||% 1.0
-  epsilon <- args$epsilon %||% 0.001
-  lsd_threshold <- args$lsd_threshold %||% 2
-  rolling_window <- args$rolling_window %||% 5
+  seed <- if (!is.null(args$seed)) args$seed else 100
+  hidden_dim <- if (!is.null(args$hidden_dim)) args$hidden_dim else 100
+  num_hidden_layers <- if (!is.null(args$num_hidden_layers)) args$num_hidden_layers else 1
+  vae_epochs <- if (!is.null(args$vae_epochs)) args$vae_epochs else 250
+  vae_lr <- if (!is.null(args$vae_lr)) args$vae_lr else 0.01
+  max_epochs <- if (!is.null(args$max_epochs)) args$max_epochs else 5000
+  lr <- if (!is.null(args$lr)) args$lr else 0.05
+  weight_decay <- if (!is.null(args$weight_decay)) args$weight_decay else 1e-5
+  balance_lambda <- if (!is.null(args$balance_lambda)) args$balance_lambda else 1.0
+  epsilon <- if (!is.null(args$epsilon)) args$epsilon else 0.001
+  lsd_threshold <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 2
+  rolling_window <- if (!is.null(args$rolling_window)) args$rolling_window else 5
 
   # Load Python script
   script_path <- system.file("python", "lbc_net.py", package = "LBCNet")

@@ -66,22 +66,21 @@ utils::globalVariables(c("x", "y"))
 #' @importFrom tidyr pivot_longer
 #' @importFrom dplyr mutate filter %>%
 #' @importFrom tidyselect everything
-#' @importFrom rlang %||%
 #'
 #' @export
 plot.lsd <- function(x, y = NULL, cov = "ALL", ...) {
 
   # Extract additional plot parameters from ...
   args <- list(...)
-  box.loc <- args$box.loc %||% seq(0.1, 0.9, by = 0.2)
-  point.color <- args$point.color %||% "#9467bd"
-  point.size <- args$point.size %||% 0.8
-  line.size <- args$line.size %||% 0.5
-  line.color <- args$line.color %||% "black"
-  theme.size <- args$theme.size %||% 15
-  boxplot.width <- args$boxplot.width %||% 0.02
-  outlier.shape <- args$outlier.shape %||% 4
-  outlier.size <- args$outlier.size %||% 1
+  box.loc <- if (!is.null(args$box.loc)) args$box.loc else seq(0.1, 0.9, by = 0.2)
+  point.color <- if (!is.null(args$point.color)) args$point.color else "#9467bd"
+  point.size <- if (!is.null(args$point.size)) args$point.size else 0.8
+  line.size <- if (!is.null(args$line.size)) args$line.size else 0.5
+  line.color <- if (!is.null(args$line.color)) args$line.color else "black"
+  theme.size <- if (!is.null(args$theme.size)) args$theme.size else 15
+  boxplot.width <- if (!is.null(args$boxplot.width)) args$boxplot.width else 0.02
+  outlier.shape <- if (!is.null(args$outlier.shape)) args$outlier.shape else 4
+  outlier.size <- if (!is.null(args$outlier.size)) args$outlier.size else 1
 
   object <- x  # Match base R’s plot() generic where 'x' is the first argument
   if (!inherits(object, "lsd")) {
