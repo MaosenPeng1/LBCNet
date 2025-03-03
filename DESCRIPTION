@@ -1,0 +1,37 @@
+Package: LBCNet
+Title: Local Balance with Calibration implemented by Neural Networks for propensity score estimation
+Version: 0.1.0
+Authors@R: c(person("Maosen", "Peng", email = "your.email@example.com", role = c("aut", "cre"), 
+                    comment = c(Affiliation1 = "Department of Biostatistics, The University of Texas MD Anderson Cancer Center", 
+                                Affiliation2 = "Department of Biostatistics and Data Science, University of Texas School of Public Health")),
+              person("Yan", "Li", email = "yan.li@example.com", role = c("aut"), 
+                    comment = c(Affiliation = "Department of Quantitative Health Sciences, Mayo Clinic")),
+              person("Chong", "Wu", email = "CWu18@mdanderson.org", role = c("aut"), 
+                    comment = c(Affiliation = "Department of Biostatistics, The University of Texas MD Anderson Cancer Center")),
+              person("Liang", "Li", email = "LLi15@mdanderson.org", role = c("aut"), 
+                    comment = c(Affiliation = "Department of Biostatistics, The University of Texas MD Anderson Cancer Center")))
+Description: This package provides functions to estimate propensity scores using 
+    the Local Balance with Calibration implemented by Neural Networks (LBC-Net), 
+    proposed by Peng et al. (2025). LBC-Net integrates deep learning models 
+    to enhance covariate balance based on a newly developed theoretical framework for 
+    defining propensity scores. Additionally, the package provides tools for evaluating 
+    estimation performance, including local balance and calibration checks.
+License: GPL (>= 3)
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    reticulate, 
+    stats,
+    ggplot2,
+    dplyr,
+    tidyr,
+    methods,
+    tidyselect,
+    utils
+Suggests: 
+    testthat (>= 3.0.0),
+    MASS
+Depends: 
+    R (>= 4.0.0)
+RoxygenNote: 7.3.1
+Config/testthat/edition: 3
