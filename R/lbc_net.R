@@ -316,6 +316,12 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
                     ATE = 1, K = 99, rho = 0.15, na.action = na.fail,
                     gpu = 0, show_progress = TRUE, ...) {
 
+  # Ensure Python is properly configured before running LBC-Net
+  if (!py_module_available("torch")) {
+    message("🔹 Python environment is not set up. Running `setup_lbcnet()`...")
+    setup_lbcnet()
+  }
+
   # Extract additional parameters from ...
   args <- list(...)
 
@@ -340,7 +346,6 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
 
   # Load Python script
   script_path <- system.file("python", "lbc_net.py", package = "LBCNet")
-  # reticulate::source_python(script_path)
   mymodule <- reticulate::import_from_path("lbc_net", path = system.file("python", package = "LBCNet"))
 
   # Handle formula-based input
