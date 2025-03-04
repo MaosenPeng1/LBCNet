@@ -318,7 +318,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
 
   # Check if Python and required modules are available
   if (!reticulate::py_module_available("torch")) {
-    message("🔹 Python environment is not set up. Running `setup_lbcnet()`...")
+    message("Python environment is not set up. Running `setup_lbcnet()`...")
     setup_lbcnet()  # Automatically configure Python
   }
 

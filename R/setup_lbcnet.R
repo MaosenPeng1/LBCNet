@@ -31,23 +31,18 @@
 #' setup_lbcnet()
 #' }
 #'
-#' @importFrom reticulate py_finalize use_python use_condaenv use_virtualenv conda_binary virtualenv_list py_module_available py_install py_config py_discover_config
+#' @importFrom reticulate use_python use_condaenv use_virtualenv conda_binary virtualenv_list py_module_available py_install py_config py_discover_config
 #' @export
 setup_lbcnet <- function() {
-  library(reticulate)
 
   message("LBCNet: Configuring Python environment...")
 
   # Unset Python session to force reconfiguration (only if needed)
-  if (reticulate::py_available()) {
-    reticulate::py_finalize()
-  }
-
   # Automatically detect the best available Python environment
   if (nzchar(Sys.getenv("RETICULATE_PYTHON", unset = ""))) {
     python_path <- Sys.getenv("RETICULATE_PYTHON")
     reticulate::use_python(python_path, required = TRUE)
-    message("✔ Using RETICULATE_PYTHON: ", python_path)
+    message("Using RETICULATE_PYTHON: ", python_path)
   } else {
     # Check if Conda is available safely
     conda_available <- tryCatch(
@@ -58,18 +53,18 @@ setup_lbcnet <- function() {
     if (conda_available) {
       conda_env <- "r-lbcnet"
       reticulate::use_condaenv(conda_env, required = FALSE)
-      message("✔ Using Conda environment: ", conda_env)
+      message("Using Conda environment: ", conda_env)
     } else if (length(reticulate::virtualenv_list()) > 0) {
       venv <- "r-reticulate"
       reticulate::use_virtualenv(venv, required = FALSE)
-      message("✔ Using Virtual Environment: ", venv)
+      message("Using Virtual Environment: ", venv)
     } else {
       system_python <- Sys.which("python")
       if (nzchar(system_python)) {
         reticulate::use_python(system_python, required = TRUE)
-        message("✔ Using system Python: ", system_python)
+        message("Using system Python: ", system_python)
       } else {
-        stop("❌ No Python environment found! Please install Python and configure reticulate.")
+        stop("No Python environment found! Please install Python and configure reticulate.")
       }
     }
   }
@@ -78,10 +73,10 @@ setup_lbcnet <- function() {
   required_modules <- c("torch", "numpy", "pandas", "tqdm")
   missing_modules <- required_modules[!reticulate::py_module_available(required_modules)]
   if (length(missing_modules) > 0) {
-    message("⚠️ Installing missing Python packages: ", paste(missing_modules, collapse = ", "))
+    message("Installing missing Python packages: ", paste(missing_modules, collapse = ", "))
     reticulate::py_install(missing_modules)
   }
 
   # Confirm successful configuration
-  message("✔ LBCNet is using Python from: ", reticulate::py_config()$python)
+  message("LBCNet is using Python from: ", reticulate::py_config()$python)
 }
