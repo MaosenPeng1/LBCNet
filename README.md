@@ -69,7 +69,7 @@ If not, you must manually specify the correct Python path.
 There are multiple ways to configure Python for `reticulate`.
 Choose one method that best suits your setup.
 
-1. Option 1: Use System Python (Default)
+Option 1: Use System Python (Default)
 If Python is installed globally on your system, `reticulate` should detect it automatically.
 To manually specify the path:
 ```r
@@ -78,7 +78,7 @@ use_python("C:/Users/YourUsername/AppData/Local/Programs/Python/Python311/python
 Best for: Users with Python already installed globally and dependencies manually managed.
 Using system Python may cause conflicts if other R packages require different dependencies.
 
-2. Option 2: Create a Virtual Environment (Recommended)
+Option 2: Create a Virtual Environment (Recommended)
 A virtual environment (venv) isolates Python dependencies, ensuring LBCNet runs without conflicts.
 Create and activate a virtual environment:
 ```r
@@ -87,7 +87,7 @@ use_virtualenv("r-lbcnet", required = TRUE)
 ```
 Best for: Ensuring package isolation and avoiding conflicts with other Python versions.
 
-3. Option 3: Use a Conda Environment
+Option 3: Use a Conda Environment
 If you have Conda installed, you can use a Conda-managed Python environment.
 ```r
 conda_create("r-lbcnet", packages = c("python=3.11"))
