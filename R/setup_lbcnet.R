@@ -31,13 +31,17 @@
 #' setup_lbcnet()
 #' }
 #'
-#' @importFrom reticulate py_config use_python conda_binary use_condaenv
-#' @importFrom reticulate virtualenv_list use_virtualenv py_module_available
-#' @importFrom reticulate py_install
-#'
+#' @importFrom reticulate py_finalize use_python use_condaenv use_virtualenv conda_binary virtualenv_list py_module_available py_install py_config py_discover_config
 #' @export
 setup_lbcnet <- function() {
+  library(reticulate)
+
   message("LBCNet: Configuring Python environment...")
+
+  # Unset Python session to force reconfiguration (only if needed)
+  if (reticulate::py_available()) {
+    reticulate::py_finalize()
+  }
 
   # Automatically detect the best available Python environment
   if (nzchar(Sys.getenv("RETICULATE_PYTHON", unset = ""))) {
@@ -48,7 +52,7 @@ setup_lbcnet <- function() {
     # Check if Conda is available safely
     conda_available <- tryCatch(
       !is.null(reticulate::conda_binary()),
-      error = function(e) FALSE  # If error occurs, assume Conda is missing
+      error = function(e) FALSE
     )
 
     if (conda_available) {
@@ -81,4 +85,3 @@ setup_lbcnet <- function() {
   # Confirm successful configuration
   message("✔ LBCNet is using Python from: ", reticulate::py_config()$python)
 }
-
