@@ -1,4 +1,4 @@
-^.*\.Rproj$  # Ignore RStudio project file
+^LBCNet.Rproj$
 ^\.Rproj\.user$  # Ignore RStudio user settings
 ^README\.md$  # Ignore README (if not needed in build)
 ^tests$  # Ignore testthat directory (optional, CRAN may not need it)
@@ -6,3 +6,4 @@
 ^\.gitignore$  # Ignore gitignore itself
 ^\.github$  # Ignore GitHub actions, issues, etc.
 ^vignettes$  # Ignore vignettes if not needed in the built package
+^LICENSE\.md$

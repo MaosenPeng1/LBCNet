@@ -124,8 +124,11 @@ def run_lbc_net(data_df, Z_columns, T_column, ck, h,
     h = torch.tensor(h, dtype=torch.float32).to(device)
 
     # Convert DataFrame to Tensors
-    Z = torch.tensor(data_df[Z_columns].values, dtype=torch.float32, device=device)
-    T = torch.tensor(data_df[T_column].values, dtype=torch.float32, device=device)
+    Z_numpy = data_df.loc[:, Z_columns].to_numpy(dtype="float32")  # Explicit NumPy conversion
+    Z = torch.tensor(Z_numpy, dtype=torch.float32, device=device)
+
+    T_numpy = data_df.loc[:, T_column].to_numpy(dtype="float32")  # Explicit NumPy conversion
+    T = torch.tensor(T_numpy, dtype=torch.float32, device=device)
     n, p = Z.shape  # Number of samples (N) and covariates (p)
 
     # Normalize Covariates (Z)
