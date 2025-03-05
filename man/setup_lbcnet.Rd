@@ -2,39 +2,36 @@
 % Please edit documentation in R/setup_lbcnet.R
 \name{setup_lbcnet}
 \alias{setup_lbcnet}
-\title{Set Up Python Environment for LBCNet}
+\title{Setup Python Environment for LBCNet}
 \usage{
-setup_lbcnet()
+setup_lbcnet(use_conda = FALSE, envname = "r-lbcnet")
+}
+\arguments{
+\item{use_conda}{Logical. If `TRUE`, it attempts to use Conda (`r-lbcnet`) instead of virtualenv.
+Default is `FALSE`, meaning virtualenv/system Python is preferred.}
+
+\item{envname}{A character string specifying the name of the virtual environment or Conda environment
+to use.  Default is `"r-lbcnet"`. One can use `virtualenv_list()` or `conda_list()` to check check the available Python environments in your system.}
 }
 \value{
-This function does not return any value. Instead, it sets up the Python environment
-for the package and ensures all dependencies are installed.
+This function configures the Python environment but does not return any value.
 }
 \description{
-This function configures the Python environment for the LBCNet package.
-It automatically detects and sets the best available Python environment
-(Conda, virtualenv, or system Python) and ensures that all required
-Python dependencies (`torch`, `numpy`, `pandas`, `tqdm`) are installed.
-
-This function should be run only once after installation to ensure the proper setup.
+This function configures the Python environment for LBCNet, ensuring the correct
+Python version and dependencies are loaded. It prioritizes virtual environments (`venv`) over
+Conda unless explicitly requested.
 }
 \details{
-\itemize{
-        \item If a Python environment is already specified via `RETICULATE_PYTHON`, it will use that.
-        \item If Conda is installed, it will attempt to use the `"r-lbcnet"` Conda environment.
-        \item If a virtual environment (`r-reticulate`) exists, it will be used.
-        \item Otherwise, it will use the system Python if available.
-        \item If no valid Python is found, it will prompt the user to install Python manually.
-      }
-
-Python Package Installation:
-- If any required Python modules (`torch`, `numpy`, `pandas`, `tqdm`) are missing,
-  they will be installed automatically.
+- The function automatically detects the best available Python environment.
+- If a user specifies `env`, it tries to activate that environment.
+- It ensures required Python packages (`torch`, `numpy`, `pandas`, `tqdm`) are available using `py_require()`.
+- If `RETICULATE_PYTHON` is set in `.Renviron`, it will respect that setting.
 }
 \examples{
 \dontrun{
-# Run this once after installing LBCNet
-setup_lbcnet()
+setup_lbcnet()  # Automatically configures the best available Python environment
+setup_lbcnet(envname = "myenv")  # Uses a specific virtual environment
+setup_lbcnet(use_conda = TRUE)  # Forces Conda if available
 }
 
 }
