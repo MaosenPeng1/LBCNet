@@ -36,6 +36,8 @@ Conda unless explicitly requested. Additionally, users can explicitly choose to 
         \item It ensures required Python packages (`torch`, `numpy`, `pandas`, `tqdm`) are available using `py_require()`.
         \item It is recommended to set up the `reticulate` package properly before running `setup_lbcnet()`.
         \item If encountering errors like `"not a Python virtualenv"`, it is advised to delete and recreate the virtual environment.
+        \item If multiple Python versions exist on the system, ensure that packages are installed in the correct Python environment.
+        \item Use `reticulate::py_config()` to verify the active Python environment before running the function.
       }
 }
 \examples{
