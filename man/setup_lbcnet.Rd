@@ -7,7 +7,8 @@
 setup_lbcnet(
   use_conda = FALSE,
   envname = "r-lbcnet",
-  use_system_python = FALSE
+  use_system_python = FALSE,
+  create_if_missing = FALSE
 )
 }
 \arguments{
@@ -19,6 +20,10 @@ to use. Default is `"r-lbcnet"`. One can use `virtualenv_list()` or `conda_list(
 
 \item{use_system_python}{Logical. If `TRUE`, the function will force the use of the system Python (`Sys.which("python")`) instead of a virtual environment or Conda.
 Default is `FALSE`. If both `use_system_python = TRUE` and `use_conda = TRUE`, the function will prioritize system Python.}
+
+\item{create_if_missing}{Logical. If `TRUE`, the function creates the specified virtual environment (`envname`) if it does not exist.
+Default is `FALSE`, meaning it will only warn if `envname` is missing and list available environments.
+This applies only when `use_conda = FALSE`, as Conda environments must be created manually.}
 }
 \value{
 This function configures the Python environment but does not return any value.
@@ -43,7 +48,8 @@ Conda unless explicitly requested. Additionally, users can explicitly choose to 
 \examples{
 \dontrun{
 setup_lbcnet()  # Automatically configures the best available Python environment
-setup_lbcnet(envname = "myenv")  # Uses a specific virtual environment
+setup_lbcnet(envname = "myenv")  # Uses a specific virtual environment (warns if missing)
+setup_lbcnet(envname = "myenv", create_if_missing = TRUE)  # Creates "myenv" if missing
 setup_lbcnet(use_conda = TRUE)  # Forces Conda if available
 setup_lbcnet(use_system_python = TRUE)  # Forces system Python
 setup_lbcnet(use_system_python = TRUE, use_conda = TRUE)  # Prioritizes system Python over Conda
