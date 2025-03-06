@@ -10,7 +10,7 @@
 #'   to use. Default is `"r-lbcnet"`. One can use `virtualenv_list()` or `conda_list()` to check the available Python environments in your system.
 #' @param use_system_python Logical. If `TRUE`, the function will force the use of the system Python (`Sys.which("python")`) instead of a virtual environment or Conda.
 #'   Default is `FALSE`. If both `use_system_python = TRUE` and `use_conda = TRUE`, the function will prioritize system Python.
-#'
+#' 
 #' @return This function configures the Python environment but does not return any value.
 #' @details
 #' \itemize{
@@ -36,74 +36,90 @@
 setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_python = FALSE) {
   message("LBCNet: Configuring Python environment...")
   
+  required_modules <- c("torch", "numpy", "pandas", "tqdm")
+  
   # Check if Python is already initialized
   if (reticulate::py_available(initialize = FALSE)) {
     current_python <- reticulate::py_config()$python
     message("Python is already initialized: ", current_python)
     message("Using the existing Python environment instead of: ", envname)
-  } else {
-  
-    # Define system Python path
-    system_python <- Sys.which("python")
     
-    # Case 1: User explicitly chooses system Python
-    if (use_system_python) {
-      if (nzchar(system_python)) {
-        reticulate::use_python(system_python, required = TRUE)
-        message("Using system Python: ", system_python)
-      } else {
-        stop("No system Python found! Please install Python and configure reticulate.")
-      }
-      return()  # Exit the function since the user has chosen system Python.
-    }
+    missing_modules <- required_modules[!reticulate::py_module_available(required_modules)]
     
-    ephemeral_path <- tools::R_user_dir("reticulate", "cache")
-    if (grepl(ephemeral_path, reticulate::py_config()$python, fixed = TRUE)) {
-      
-      message("Detected ephemeral virtual environment.")
-      message("   This environment resets every R session and may cause issues.")
-      
-      message("Removing ephemeral virtual environment...")
-      unlink(tools::R_user_dir("reticulate", "cache"), recursive = TRUE, force = TRUE)
-      unlink(tools::R_user_dir("reticulate", "data"), recursive = TRUE)
-      
-      # Create a new persistent virtual environment
-      envname <- "r-lbcnet"  # Set your preferred virtual environment name
-      message("Creating a persistent virtual environment: ", envname)
-      reticulate::virtualenv_create(envname)
-      
-      # Activate the newly created virtual environment
-      reticulate::use_virtualenv(envname, required = TRUE)
-      message("Using persistent virtual environment: ", envname)
-    }
-  
-    # Case 2: Use Python from RETICULATE_PYTHON if set
-    if (nzchar(Sys.getenv("RETICULATE_PYTHON", unset = ""))) {
-      reticulate::use_python(Sys.getenv("RETICULATE_PYTHON"), required = TRUE)
-      message("Using RETICULATE_PYTHON: ", Sys.getenv("RETICULATE_PYTHON"))
-    
-    # Case 3: Use Conda if requested and available
-    } else if (use_conda && reticulate::conda_binary() != "") {
-      reticulate::use_condaenv(envname, required = TRUE)
-      message("Using Conda environment: ", envname)
-      
-    # Case 4: Use an existing virtual environment
-    } else if (envname %in% reticulate::virtualenv_list()) {
-      reticulate::use_virtualenv(envname, required = TRUE)
-      message("Using Virtual Environment: ", envname)
-      
-    # Case 5: Fall back to system Python if no other options are available
+    if (length(missing_modules) > 0) {
+      message("Installing missing Python packages: ", paste(missing_modules, collapse = ", "))
+      reticulate::py_install(missing_modules)
     } else {
-      if (nzchar(system_python)) {
-        reticulate::use_python(system_python, required = TRUE)
-        message("Using system Python: ", system_python)
-      } else {
-        stop("No Python environment found! Please install Python and configure reticulate.")
-      }
+      message("All required Python packages are already installed.")
+    }
+    
+    # Confirm successful configuration
+    message("LBCNet is using Python from: ", reticulate::py_config()$python)
+    
+    return(invisible(NULL))
+  } 
+  
+  message("No active Python environment detected. Detecting available environments...")
+  
+  # Case 1: User explicitly chooses system Python
+  # Define system Python path
+  system_python <- Sys.which("python")
+  if (use_system_python) {
+    if (nzchar(system_python)) {
+      reticulate::use_python(system_python, required = TRUE)
+      message("Using system Python: ", system_python)
+    } else {
+      stop("No system Python found! Please install Python and configure reticulate.")
+    }
+    return(invisible(NULL))  # Exit the function since the user has chosen system Python.
+  }
+    
+  ephemeral_path <- tools::R_user_dir("reticulate", "cache")
+  if (grepl(ephemeral_path, reticulate::py_config()$python, fixed = TRUE)) {
+    
+    message("Detected ephemeral virtual environment.")
+    message("   This environment resets every R session and may cause issues.")
+    
+    message("Removing ephemeral virtual environment...")
+    unlink(tools::R_user_dir("reticulate", "cache"), recursive = TRUE, force = TRUE)
+    unlink(tools::R_user_dir("reticulate", "data"), recursive = TRUE)
+    
+    # Create a new persistent virtual environment
+    envname <- "r-lbcnet"  # Set your preferred virtual environment name
+    message("Creating a persistent virtual environment: ", envname)
+    reticulate::virtualenv_create(envname)
+    
+    # Activate the newly created virtual environment
+    reticulate::use_virtualenv(envname, required = TRUE)
+    message("Using persistent virtual environment: ", envname)
+  }
+
+  # Case 2: Use Python from RETICULATE_PYTHON if set
+  if (nzchar(Sys.getenv("RETICULATE_PYTHON", unset = ""))) {
+    reticulate::use_python(Sys.getenv("RETICULATE_PYTHON"), required = TRUE)
+    message("Using RETICULATE_PYTHON: ", Sys.getenv("RETICULATE_PYTHON"))
+  
+  # Case 3: Use Conda if requested and available
+  } else if (use_conda && reticulate::conda_binary() != "") {
+    reticulate::use_condaenv(envname, required = TRUE)
+    message("Using Conda environment: ", envname)
+    
+  # Case 4: Use an existing virtual environment
+  } else if (envname %in% reticulate::virtualenv_list()) {
+    reticulate::use_virtualenv(envname, required = TRUE)
+    message("Using Virtual Environment: ", envname)
+    
+  # Case 5: Fall back to system Python if no other options are available
+  } else {
+    if (nzchar(system_python)) {
+      reticulate::use_python(system_python, required = TRUE)
+      message("Using system Python: ", system_python)
+    } else {
+      stop("No Python environment found! Please install Python and configure reticulate.")
     }
   }
   # Install missing Python packages
-  required_modules <- c("torch", "numpy", "pandas", "tqdm")
+  
   
   if (reticulate::py_module_available("pip")) {
     missing_modules <- required_modules[!reticulate::py_module_available(required_modules)]
