@@ -38,8 +38,9 @@
 setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_python = FALSE) {
   message("LBCNet: Configuring Python environment...")
   
-  ephemeral_path <- tools::R_user_dir("reticulate", "cache")
-  if (grepl(ephemeral_path, reticulate::py_config()$python, fixed = TRUE)) {
+  current_python <- reticulate::py_config()$python
+  ephemeral_patterns <- c("reticulate/uv/cache", "reticulate/virtualenvs/cache")
+  if (any(sapply(ephemeral_patterns, function(p) grepl(p, current_python, fixed = TRUE)))) {
     
     message("Detected ephemeral virtual environment.")
     message("   This environment resets every R session and may cause issues.")
