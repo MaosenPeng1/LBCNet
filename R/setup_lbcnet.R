@@ -38,6 +38,26 @@
 setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_python = FALSE) {
   message("LBCNet: Configuring Python environment...")
   
+  ephemeral_path <- tools::R_user_dir("reticulate", "cache")
+  if (grepl(ephemeral_path, reticulate::py_config()$python, fixed = TRUE)) {
+    
+    message("Detected ephemeral virtual environment.")
+    message("   This environment resets every R session and may cause issues.")
+    
+    message("Removing ephemeral virtual environment...")
+    unlink(tools::R_user_dir("reticulate", "cache"), recursive = TRUE, force = TRUE)
+    unlink(tools::R_user_dir("reticulate", "data"), recursive = TRUE)
+    
+    # Create a new persistent virtual environment
+    envname <- "r-lbcnet"  # Set your preferred virtual environment name
+    message("Creating a persistent virtual environment: ", envname)
+    reticulate::virtualenv_create(envname)
+    
+    # Activate the newly created virtual environment
+    reticulate::use_virtualenv(envname, required = TRUE)
+    message("Using persistent virtual environment: ", envname)
+  }
+  
   required_modules <- c("torch", "numpy", "pandas", "tqdm")
   
   # Check if Python is already initialized
@@ -84,26 +104,6 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
       stop("No system Python found! Please install Python and configure reticulate.")
     }
     return(invisible(NULL))  # Exit the function since the user has chosen system Python.
-  }
-    
-  ephemeral_path <- tools::R_user_dir("reticulate", "cache")
-  if (grepl(ephemeral_path, reticulate::py_config()$python, fixed = TRUE)) {
-    
-    message("Detected ephemeral virtual environment.")
-    message("   This environment resets every R session and may cause issues.")
-    
-    message("Removing ephemeral virtual environment...")
-    unlink(tools::R_user_dir("reticulate", "cache"), recursive = TRUE, force = TRUE)
-    unlink(tools::R_user_dir("reticulate", "data"), recursive = TRUE)
-    
-    # Create a new persistent virtual environment
-    envname <- "r-lbcnet"  # Set your preferred virtual environment name
-    message("Creating a persistent virtual environment: ", envname)
-    reticulate::virtualenv_create(envname)
-    
-    # Activate the newly created virtual environment
-    reticulate::use_virtualenv(envname, required = TRUE)
-    message("Using persistent virtual environment: ", envname)
   }
 
   # Case 2: Use Python from RETICULATE_PYTHON if set
