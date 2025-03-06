@@ -10,6 +10,9 @@
 #'   to use. Default is `"r-lbcnet"`. One can use `virtualenv_list()` or `conda_list()` to check the available Python environments in your system.
 #' @param use_system_python Logical. If `TRUE`, the function will force the use of the system Python (`Sys.which("python")`) instead of a virtual environment or Conda.
 #'   Default is `FALSE`. If both `use_system_python = TRUE` and `use_conda = TRUE`, the function will prioritize system Python.
+#' @param create_if_missing Logical. If `TRUE`, the function creates the specified virtual environment (`envname`) if it does not exist.
+#'   Default is `FALSE`, meaning it will only warn if `envname` is missing and list available environments.
+#'   This applies only when `use_conda = FALSE`, as Conda environments must be created manually.
 #' 
 #' @return This function configures the Python environment but does not return any value.
 #' @details
@@ -27,7 +30,8 @@
 #' @examples
 #' \dontrun{
 #' setup_lbcnet()  # Automatically configures the best available Python environment
-#' setup_lbcnet(envname = "myenv")  # Uses a specific virtual environment
+#' setup_lbcnet(envname = "myenv")  # Uses a specific virtual environment (warns if missing)
+#' setup_lbcnet(envname = "myenv", create_if_missing = TRUE)  # Creates "myenv" if missing
 #' setup_lbcnet(use_conda = TRUE)  # Forces Conda if available
 #' setup_lbcnet(use_system_python = TRUE)  # Forces system Python
 #' setup_lbcnet(use_system_python = TRUE, use_conda = TRUE)  # Prioritizes system Python over Conda
@@ -35,7 +39,7 @@
 #'
 #' @importFrom reticulate use_python use_virtualenv use_condaenv py_config py_module_available py_install
 #' @export
-setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_python = FALSE) {
+setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_python = FALSE, create_if_missing = FALSE) {
   message("LBCNet: Configuring Python environment...")
   
   required_modules <- c("torch", "numpy", "pandas", "tqdm")
@@ -86,6 +90,7 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
   } 
   
   message("No active Python environment detected. Detecting available environments...")
+  valid_virtualenvs <- reticulate::virtualenv_list()
   
   # Case 1: User explicitly chooses system Python
   # Define system Python path
@@ -111,9 +116,21 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
     message("Using Conda environment: ", envname)
     
   # Case 4: Use an existing virtual environment
-  } else if (envname %in% reticulate::virtualenv_list()) {
+  } else if (envname %in% valid_virtualenvs) {
     reticulate::use_virtualenv(envname, required = TRUE)
     message("Using Virtual Environment: ", envname)
+  
+  } else if (nzchar(envname)){
+    message("Warning: The specified virtual environment '", envname, "' does not exist. Please check the name.")
+    message("Available virtual environments: ", paste(valid_virtualenvs, collapse = ", "))
+    
+    if (create_if_missing) {
+      message("Creating a new virtual environment: ", envname)
+      reticulate::virtualenv_create(envname)
+      reticulate::use_virtualenv(envname, required = TRUE)
+    } else {
+      message("Virtual environment '", envname, "' was not found. Falling back to system Python.")
+    }
     
   # Case 5: Fall back to system Python if no other options are available
   } else {
