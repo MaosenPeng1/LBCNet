@@ -38,33 +38,26 @@
 setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_python = FALSE) {
   message("LBCNet: Configuring Python environment...")
   
-  current_python <- reticulate::py_config()$python
-  ephemeral_patterns <- c("reticulate/uv/cache", "reticulate/virtualenvs/cache")
-  if (any(sapply(ephemeral_patterns, function(p) grepl(p, current_python, fixed = TRUE)))) {
-    
-    message("Detected ephemeral virtual environment.")
-    message("   This environment resets every R session and may cause issues.")
-    
-    message("Removing ephemeral virtual environment...")
-    unlink(tools::R_user_dir("reticulate", "cache"), recursive = TRUE, force = TRUE)
-    unlink(tools::R_user_dir("reticulate", "data"), recursive = TRUE)
-    
-    # Create a new persistent virtual environment
-    envname <- "r-lbcnet"  # Set your preferred virtual environment name
-    message("Creating a persistent virtual environment: ", envname)
-    reticulate::virtualenv_create(envname)
-    
-    # Activate the newly created virtual environment
-    reticulate::use_virtualenv(envname, required = TRUE)
-    message("Using persistent virtual environment: ", envname)
-  }
-  
   required_modules <- c("torch", "numpy", "pandas", "tqdm")
   
   # Check if Python is already initialized
   if (reticulate::py_available(initialize = FALSE)) {
     current_python <- reticulate::py_config()$python
     message("Python is already initialized: ", current_python)
+  
+    ephemeral_patterns <- c("reticulate/uv/cache", "reticulate/virtualenvs/cache")
+    if (any(sapply(ephemeral_patterns, function(p) grepl(p, current_python, fixed = TRUE)))) {
+      
+      message("Detected ephemeral virtual environment.")
+      message("This environment resets every R session and may cause issues.")
+      
+      message("Removing ephemeral virtual environment...")
+      unlink(tools::R_user_dir("reticulate", "cache"), recursive = TRUE, force = TRUE)
+      unlink(tools::R_user_dir("reticulate", "data"), recursive = TRUE)
+      
+      stop("An ephemeral virtual environment was detected and removed. Please restart your R session and run `setup_lbcnet()` again.", call. = FALSE)
+    }
+    
     message("Using the existing Python environment instead of: ", envname)
     
     missing_modules <- required_modules[!sapply(required_modules, reticulate::py_module_available)]
@@ -131,6 +124,9 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
       stop("No Python environment found! Please install Python and configure reticulate.")
     }
   }
+  
+  current_python <- reticulate::py_config()$python
+  message("LBCNet is using Python from: ", current_python)
   
   # Install missing Python packages
   missing_modules <- required_modules[!sapply(required_modules, reticulate::py_module_available)]
