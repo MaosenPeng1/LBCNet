@@ -7,3 +7,4 @@
 ^\.github$  # Ignore GitHub actions, issues, etc.
 ^vignettes$  # Ignore vignettes if not needed in the built package
 ^LICENSE\.md$
+^.*\.Rproj$

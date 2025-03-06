@@ -4,14 +4,21 @@
 \alias{setup_lbcnet}
 \title{Setup Python Environment for LBCNet}
 \usage{
-setup_lbcnet(use_conda = FALSE, envname = "r-lbcnet")
+setup_lbcnet(
+  use_conda = FALSE,
+  envname = "r-lbcnet",
+  use_system_python = FALSE
+)
 }
 \arguments{
 \item{use_conda}{Logical. If `TRUE`, it attempts to use Conda (`r-lbcnet`) instead of virtualenv.
 Default is `FALSE`, meaning virtualenv/system Python is preferred.}
 
 \item{envname}{A character string specifying the name of the virtual environment or Conda environment
-to use.  Default is `"r-lbcnet"`. One can use `virtualenv_list()` or `conda_list()` to check check the available Python environments in your system.}
+to use. Default is `"r-lbcnet"`. One can use `virtualenv_list()` or `conda_list()` to check the available Python environments in your system.}
+
+\item{use_system_python}{Logical. If `TRUE`, the function will force the use of the system Python (`Sys.which("python")`) instead of a virtual environment or Conda.
+Default is `FALSE`. If both `use_system_python = TRUE` and `use_conda = TRUE`, the function will prioritize system Python.}
 }
 \value{
 This function configures the Python environment but does not return any value.
@@ -19,19 +26,25 @@ This function configures the Python environment but does not return any value.
 \description{
 This function configures the Python environment for LBCNet, ensuring the correct
 Python version and dependencies are loaded. It prioritizes virtual environments (`venv`) over
-Conda unless explicitly requested.
+Conda unless explicitly requested. Additionally, users can explicitly choose to use the system Python.
 }
 \details{
-- The function automatically detects the best available Python environment.
-- If a user specifies `env`, it tries to activate that environment.
-- It ensures required Python packages (`torch`, `numpy`, `pandas`, `tqdm`) are available using `py_require()`.
-- If `RETICULATE_PYTHON` is set in `.Renviron`, it will respect that setting.
+\itemize{
+        \item The function automatically detects the best available Python environment.
+        \item If a user specifies `envname`, it tries to activate that environment.
+        \item If both `use_system_python = TRUE` and `use_conda = TRUE`, the function will prioritize system Python.
+        \item It ensures required Python packages (`torch`, `numpy`, `pandas`, `tqdm`) are available using `py_require()`.
+        \item It is recommended to set up the `reticulate` package properly before running `setup_lbcnet()`.
+        \item If encountering errors like `"not a Python virtualenv"`, it is advised to delete and recreate the virtual environment.
+      }
 }
 \examples{
 \dontrun{
 setup_lbcnet()  # Automatically configures the best available Python environment
 setup_lbcnet(envname = "myenv")  # Uses a specific virtual environment
 setup_lbcnet(use_conda = TRUE)  # Forces Conda if available
+setup_lbcnet(use_system_python = TRUE)  # Forces system Python
+setup_lbcnet(use_system_python = TRUE, use_conda = TRUE)  # Prioritizes system Python over Conda
 }
 
 }
