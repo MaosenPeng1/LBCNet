@@ -136,6 +136,11 @@
 #'   `rolling_window` steps is updated. Training halts when this rolling average drops below `lsd_threshold`,
 #'   or when the predefined maximum epochs is reached, ensuring sufficient learning capacity.}
 #'   }
+#'   
+#' @param setup_lbcnet_args List. Optional arguments passed to \code{\link{setup_lbcnet}} for configuring the Python environment.
+#'   If Python is not set up, `setup_lbcnet()` is automatically called using these parameters.
+#'   Default is `list(envname = "r-lbcnet", create_if_missing = TRUE)`, meaning it will attempt to use the virtual environment `"r-lbcnet"`
+#'   and create it if missing.
 #'
 #' @return An object of class `"lbc_net"`, containing:
 #' \itemize{
@@ -314,12 +319,12 @@
 #' @export
 lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
                     ATE = 1, K = 99, rho = 0.15, na.action = na.fail,
-                    gpu = 0, show_progress = TRUE, ...) {
+                    gpu = 0, show_progress = TRUE, ..., setup_lbcnet_args = list()) {
 
   # Check if Python and required modules are available
   if (!reticulate::py_module_available("torch")) {
     message("Python environment is not set up. Running `setup_lbcnet()`...")
-    setup_lbcnet()  # Automatically configure Python
+    do.call(setup_lbcnet, setup_lbcnet_args)  # Automatically configure Python
   }
 
   # Extract additional parameters from ...

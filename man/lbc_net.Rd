@@ -15,7 +15,8 @@ lbc_net(
   na.action = na.fail,
   gpu = 0,
   show_progress = TRUE,
-  ...
+  ...,
+  setup_lbcnet_args = list()
 )
 }
 \arguments{
@@ -150,6 +151,11 @@ If `TRUE` (default), displays elapsed time, remaining time, loss values, and tra
   `rolling_window` steps is updated. Training halts when this rolling average drops below `lsd_threshold`,
   or when the predefined maximum epochs is reached, ensuring sufficient learning capacity.}
   }}
+
+\item{setup_lbcnet_args}{List. Optional arguments passed to \code{\link{setup_lbcnet}} for configuring the Python environment.
+If Python is not set up, `setup_lbcnet()` is automatically called using these parameters.
+Default is `list(envname = "r-lbcnet", create_if_missing = TRUE)`, meaning it will attempt to use the virtual environment `"r-lbcnet"`
+and create it if missing.}
 }
 \value{
 An object of class `"lbc_net"`, containing:

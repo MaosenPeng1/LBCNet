@@ -30,10 +30,10 @@
 #' @examples
 #' \dontrun{
 #' setup_lbcnet()  # Automatically configures the best available Python environment
-#' setup_lbcnet(envname = "myenv")  # Uses a specific virtual environment (warns if missing)
-#' setup_lbcnet(envname = "myenv", create_if_missing = TRUE)  # Creates "myenv" if missing
+#' setup_lbcnet(envname = "r-lbcnet")  # Uses a specific virtual environment (warns if missing)
+#' setup_lbcnet(envname = "r-lbcnet", create_if_missing = TRUE)  # Creates "r-lbcnet" if missing
 #' setup_lbcnet(use_conda = TRUE)  # Forces Conda if available
-#' setup_lbcnet(use_system_python = TRUE)  # Forces system Python
+#' setup_lbcnet(use_system_python = TRUE)  # Forces to use system Python
 #' setup_lbcnet(use_system_python = TRUE, use_conda = TRUE)  # Prioritizes system Python over Conda
 #' }
 #'
@@ -89,9 +89,6 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
     return(invisible(NULL))
   } 
   
-  message("No active Python environment detected. Detecting available environments...")
-  valid_virtualenvs <- reticulate::virtualenv_list()
-  
   # Case 1: User explicitly chooses system Python
   # Define system Python path
   system_python <- Sys.which("python")
@@ -104,6 +101,9 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
     }
     return(invisible(NULL))  # Exit the function since the user has chosen system Python.
   }
+  
+  message("No active Python environment detected. Detecting available environments...")
+  valid_virtualenvs <- reticulate::virtualenv_list()
 
   # Case 2: Use Python from RETICULATE_PYTHON if set
   if (nzchar(Sys.getenv("RETICULATE_PYTHON", unset = ""))) {

@@ -48,10 +48,10 @@ Conda unless explicitly requested. Additionally, users can explicitly choose to 
 \examples{
 \dontrun{
 setup_lbcnet()  # Automatically configures the best available Python environment
-setup_lbcnet(envname = "myenv")  # Uses a specific virtual environment (warns if missing)
-setup_lbcnet(envname = "myenv", create_if_missing = TRUE)  # Creates "myenv" if missing
+setup_lbcnet(envname = "r-lbcnet")  # Uses a specific virtual environment (warns if missing)
+setup_lbcnet(envname = "r-lbcnet", create_if_missing = TRUE)  # Creates "r-lbcnet" if missing
 setup_lbcnet(use_conda = TRUE)  # Forces Conda if available
-setup_lbcnet(use_system_python = TRUE)  # Forces system Python
+setup_lbcnet(use_system_python = TRUE)  # Forces to use system Python
 setup_lbcnet(use_system_python = TRUE, use_conda = TRUE)  # Prioritizes system Python over Conda
 }
 
