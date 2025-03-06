@@ -44,11 +44,21 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
     message("Python is already initialized: ", current_python)
     message("Using the existing Python environment instead of: ", envname)
     
-    missing_modules <- required_modules[!reticulate::py_module_available(required_modules)]
-    
+    missing_modules <- required_modules[!sapply(required_modules, reticulate::py_module_available)]
     if (length(missing_modules) > 0) {
       message("Installing missing Python packages: ", paste(missing_modules, collapse = ", "))
-      reticulate::py_install(missing_modules)
+      
+      if (reticulate::py_module_available("pip")) {
+        if (grepl("virtualenvs", reticulate::py_config()$python)) {
+          # Virtual environment: Use py_install()
+          reticulate::py_install(missing_modules)
+        } else {
+          # System Python: Use system("pip install ...") but only for missing packages
+          system(paste("pip install", paste(missing_modules, collapse = " ")))
+        }
+      } else {
+        stop("pip` is not available in the current Python environment. Please install it manually.")
+      }
     } else {
       message("All required Python packages are already installed.")
     }
@@ -118,27 +128,25 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
       stop("No Python environment found! Please install Python and configure reticulate.")
     }
   }
+  
   # Install missing Python packages
-  
-  
-  if (reticulate::py_module_available("pip")) {
-    missing_modules <- required_modules[!reticulate::py_module_available(required_modules)]
+  missing_modules <- required_modules[!sapply(required_modules, reticulate::py_module_available)]
+  if (length(missing_modules) > 0) {
+    message("Installing missing Python packages: ", paste(missing_modules, collapse = ", "))
     
-    if (length(missing_modules) > 0) {
+    if (reticulate::py_module_available("pip")) {
       if (grepl("virtualenvs", reticulate::py_config()$python)) {
         # Virtual environment: Use py_install()
-        message("Installing missing Python packages (Virtual Environment): ", paste(missing_modules, collapse = ", "))
         reticulate::py_install(missing_modules)
       } else {
         # System Python: Use system("pip install ...") but only for missing packages
-        message("Installing missing Python packages (System Python) using pip: ", paste(missing_modules, collapse = ", "))
         system(paste("pip install", paste(missing_modules, collapse = " ")))
       }
     } else {
-      message("All required Python packages are already installed.")
+      stop("pip` is not available in the current Python environment. Please install it manually.")
     }
   } else {
-    stop("pip` is not available in the current Python environment. Please install it manually.")
+    message("All required Python packages are already installed.")
   }
   
   # Confirm successful configuration
