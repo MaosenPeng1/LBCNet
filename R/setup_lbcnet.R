@@ -20,6 +20,8 @@
 #'         \item It ensures required Python packages (`torch`, `numpy`, `pandas`, `tqdm`) are available using `py_require()`.
 #'         \item It is recommended to set up the `reticulate` package properly before running `setup_lbcnet()`.
 #'         \item If encountering errors like `"not a Python virtualenv"`, it is advised to delete and recreate the virtual environment.
+#'         \item If multiple Python versions exist on the system, ensure that packages are installed in the correct Python environment.
+#'         \item Use `reticulate::py_config()` to verify the active Python environment before running the function.
 #'       }
 #'
 #' @examples
@@ -53,8 +55,8 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
           # Virtual environment: Use py_install()
           reticulate::py_install(missing_modules)
         } else {
-          # System Python: Use system("pip install ...") but only for missing packages
-          system(paste("pip install", paste(missing_modules, collapse = " ")))
+          # System Python: Use system pip
+          system(paste(shQuote(current_python), "-m pip install --upgrade", paste(missing_modules, collapse = " ")))
         }
       } else {
         stop("pip` is not available in the current Python environment. Please install it manually.")
