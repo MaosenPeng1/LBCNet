@@ -120,7 +120,7 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
     reticulate::use_virtualenv(envname, required = TRUE)
     message("Using Virtual Environment: ", envname)
   
-  } else if (nzchar(envname)){
+  } else {
     message("Warning: The specified virtual environment '", envname, "' does not exist. Please check the name.")
     message("Available virtual environments: ", paste(valid_virtualenvs, collapse = ", "))
     
@@ -130,17 +130,16 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
       reticulate::use_virtualenv(envname, required = TRUE)
     } else {
       message("Virtual environment '", envname, "' was not found. Falling back to system Python.")
+      
+      # Case 5: Fall back to system Python if no other options are available
+      if (nzchar(system_python)) {
+        reticulate::use_python(system_python, required = TRUE)
+        message("Using system Python: ", system_python)
+      } else {
+        stop("No Python environment found! Please install Python and configure reticulate.")
+      }
     }
-    
-  # Case 5: Fall back to system Python if no other options are available
-  } else {
-    if (nzchar(system_python)) {
-      reticulate::use_python(system_python, required = TRUE)
-      message("Using system Python: ", system_python)
-    } else {
-      stop("No Python environment found! Please install Python and configure reticulate.")
-    }
-  }
+  } 
   
   current_python <- reticulate::py_config()$python
   message("LBCNet is using Python from: ", current_python)
@@ -151,7 +150,7 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
     message("Installing missing Python packages: ", paste(missing_modules, collapse = ", "))
     
     if (reticulate::py_module_available("pip")) {
-      if (grepl("virtualenvs", reticulate::py_config()$python)) {
+      if (grepl("virtualenvs", current_python)) {
         # Virtual environment: Use py_install()
         reticulate::py_install(missing_modules)
       } else {

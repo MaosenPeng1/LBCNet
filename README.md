@@ -57,10 +57,18 @@ For detailed installation and setup instructions, visit the [Reticulate Document
 After installing `reticulate`, load it and check which Python version is detected:
 
 ```r
-library(reticulate)
+available_pythons <- unique(c(
+  Sys.which("python"),
+  Sys.which("python3"),
+  reticulate::py_discover_config()$python
+))
 
-# Display the Python version and path being used
-py_config()
+available_pythons <- available_pythons[nzchar(available_pythons)]  # Remove empty results
+print(available_pythons)
+
+# Check available virtual and Conda environments
+reticulate::virtualenv_list()
+reticulate::conda_list()
 ```
 If `reticulate` detects the correct Python version, you can skip the next step.
 If not, you must manually specify the correct Python path.
@@ -69,29 +77,40 @@ If not, you must manually specify the correct Python path.
 There are multiple ways to configure Python for `reticulate`.
 Choose one method that best suits your setup.
 
-Option 1: Use System Python (Default)
+**Option 1**: Use System Python (Recommended for Servers & Clusters)
 If Python is installed globally on your system, `reticulate` should detect it automatically.
 To manually specify the path:
 ```r
-use_python("C:/Users/YourUsername/AppData/Local/Programs/Python/Python311/python.exe", required = TRUE)
+## Set the Python Path for the Entire R Session 
+## Best for: Servers, clusters, and users who manage Python separately.
+Sys.setenv(RETICULATE_PYTHON = "/path/to/python")  # Adjust based on your system
+reticulate::py_discover_config()
 ```
-Best for: Users with Python already installed globally and dependencies manually managed.
+Or
+
+```r
+## Set Python for the Current R Session Only
+## Best for: Local machines where Python paths may change frequently.
+reticulate::use_python("/path/to/python", required = TRUE)
+reticulate::py_config()
+```
+This ensures stability by using a known, system-managed Python installation. 
 Using system Python may cause conflicts if other R packages require different dependencies.
 
-Option 2: Create a Virtual Environment (Recommended)
+**Option 2**: Create a Virtual Environment (Recommended)
 A virtual environment (venv) isolates Python dependencies, ensuring LBCNet runs without conflicts.
 Create and activate a virtual environment:
 ```r
-virtualenv_create("r-lbcnet")
-use_virtualenv("r-lbcnet", required = TRUE)
+reticulate::virtualenv_create("r-lbcnet")  # Create virtual environment
+reticulate::use_virtualenv("r-lbcnet", required = TRUE)  # Activate virtual environment
 ```
 Best for: Ensuring package isolation and avoiding conflicts with other Python versions.
 
-Option 3: Use a Conda Environment
+**Option 3**: Use a Conda Environment
 If you have Conda installed, you can use a Conda-managed Python environment.
 ```r
-conda_create("r-lbcnet", packages = c("python=3.11"))
-use_condaenv("r-lbcnet", required = TRUE)
+reticulate::conda_create("r-lbcnet", packages = c("python=3.11"))
+reticulate::use_condaenv("r-lbcnet", required = TRUE)
 ```
 Best for: Users who already use Conda to manage Python dependencies.
 
@@ -99,7 +118,7 @@ Best for: Users who already use Conda to manage Python dependencies.
 Once Python is configured, you need to install the required dependencies.
 Run one of the following:
 ```r
-py_install(c("torch", "numpy", "pandas", "tqdm"))
+reticulate::py_install(c("torch", "numpy", "pandas", "tqdm"), envname = "r-lbcnet")
 ```
 OR
 ```r
@@ -122,8 +141,6 @@ For detailed package intall instructions, visit the [Package Install](https://rs
 5. **Module not found (e.g., torch not found)**: Run `py_install("torch")` to install missing dependencies or try `py_require("torch")`.
 6. **Failed to initialize Python**: Restart your R session (`Session` > `Restart R`) and rerun `use_virtualenv()` or `use_condaenv()`.
 
-
-```
 If all commands execute without errors and display package versions, the installation was successful.
 
 ## Install LBCNet

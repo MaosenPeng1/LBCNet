@@ -320,9 +320,14 @@
 lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
                     ATE = 1, K = 99, rho = 0.15, na.action = na.fail,
                     gpu = 0, show_progress = TRUE, ..., setup_lbcnet_args = list()) {
-
-  # Check if Python and required modules are available
-  if (!reticulate::py_module_available("torch")) {
+  
+  # Define required Python modules
+  required_modules <- c("torch", "numpy", "pandas", "tqdm")
+  
+  # Check if any required module is missing
+  missing_modules <- required_modules[!sapply(required_modules, reticulate::py_module_available)]
+  
+  if (length(missing_modules) > 0) {
     message("Python environment is not set up. Running `setup_lbcnet()`...")
     do.call(setup_lbcnet, setup_lbcnet_args)  # Automatically configure Python
   }
