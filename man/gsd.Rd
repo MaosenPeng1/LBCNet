@@ -32,19 +32,22 @@ The GSD is reported as a percentage and is widely used in propensity score weigh
 
 The GSD measures covariate balance across treatment groups:
 \deqn{
-GSD = \frac{| \eqn{\mu_1} - \eqn{\mu_0} | }{ \sqrt{ ( m_1 v_1 + m_0 v_0 )/(m_1 + m_0) } } \times 100\%
+GSD = \frac{| \mu_1 - \mu_0 | }{ \sqrt{ ( m_1 v_1 + m_0 v_0 )/(m_1 + m_0) } } \times 100\%
 }
 where:
+
 - \eqn{\mu_1} and \eqn{\mu_0} are the IPTW-weighted means for the treated and control groups:
   \deqn{
-  \eqn{\mu_1} = \frac{\sum_{i=1}^{N} T_i W_i X_i }{ \sum_{i=1}^{N} T_i W_i }, \quad
-  \eqn{\mu_0} = \frac{\sum_{i=1}^{N} (1-T_i) W_i X_i }{ \sum_{i=1}^{N} (1-T_i) W_i }.
+  \mu_1 = \frac{\sum_{i=1}^{N} T_i W_i X_i }{ \sum_{i=1}^{N} T_i W_i }, \quad
+  \mu_0 = \frac{\sum_{i=1}^{N} (1-T_i) W_i X_i }{ \sum_{i=1}^{N} (1-T_i) W_i }.
   }
+  
 - \eqn{v_1} and \eqn{v_0} are the corresponding weighted variances:
   \deqn{
-  v_1 = \frac{\sum_{i=1}^{N} T_i W_i (X_i - \eqn{\mu_1})^2 }{ \sum_{i=1}^{N} T_i W_i - 1 }, \quad
-  v_0 = \frac{\sum_{i=1}^{N} (1-T_i) W_i (X_i - \eqn{\mu_0})^2 }{ \sum_{i=1}^{N} (1-T_i) W_i - 1 }.
+  v_1 = \frac{\sum_{i=1}^{N} T_i W_i (X_i - \mu_1)^2 }{ \sum_{i=1}^{N} T_i W_i - 1 }, \quad
+  v_0 = \frac{\sum_{i=1}^{N} (1-T_i) W_i (X_i - \mu_0)^2 }{ \sum_{i=1}^{N} (1-T_i) W_i - 1 }.
   }
+  
 - \eqn{m_1} and \eqn{m_0} are the effective sample sizes (ESS) of the treated and control groups:
   \deqn{
   m_1 = \frac{ (\sum_{i=1}^{N} T_i W_i)^2 }{ \sum_{i=1}^{N} T_i W_i^2 }, \quad
