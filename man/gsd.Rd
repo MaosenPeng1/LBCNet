@@ -9,7 +9,7 @@ gsd(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 1, ...)
 \arguments{
 \item{object}{An optional object of class `"lbc_net"`, from which `Z`, `Tr`, and `weights` are extracted.}
 
-\item{Z}{A numeric matrix or vector of covariates. Required if `object` is not provided.}
+\item{Z}{A numeric matrix, data frame, or vector of covariates. Required if `object` is not provided.}
 
 \item{Tr}{A numeric vector (0/1) indicating treatment assignment. Required if `object` is not provided.}
 

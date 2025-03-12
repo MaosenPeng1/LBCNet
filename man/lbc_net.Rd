@@ -33,7 +33,7 @@ that class), specifying a symbolic description of the model in the form
 `Tr ~ X1 + X2 + ...`. If `formula` is provided, `Z` and `Tr` are extracted
 from `data`. If omitted, `Z` and `Tr` must be supplied explicitly.}
 
-\item{Z}{A numeric matrix of covariates. Required if `formula` is not provided.
+\item{Z}{A numeric matrix or data frame of covariates. Required if `formula` is not provided.
 Each row represents an observation, and each column represents a covariate.
 If `formula` is used, `Z` is extracted from `data` automatically.}
 

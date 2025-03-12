@@ -18,7 +18,7 @@
 #'   `Tr ~ X1 + X2 + ...`. If `formula` is provided, `Z` and `Tr` are extracted
 #'   from `data`. If omitted, `Z` and `Tr` must be supplied explicitly.
 #'
-#' @param Z A numeric matrix of covariates. Required if `formula` is not provided.
+#' @param Z A numeric matrix or data frame of covariates. Required if `formula` is not provided.
 #'   Each row represents an observation, and each column represents a covariate.
 #'   If `formula` is used, `Z` is extracted from `data` automatically.
 #'
@@ -371,7 +371,15 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   if (is.null(Z) || is.null(Tr)) {
     stop("Either provide a formula with a dataframe or specify Z and Tr directly as a matrix and vector.")
   }
-  if (!is.matrix(Z)) stop("Z must be a matrix.")
+  
+  if (is.vector(Z) || (is.data.frame(Z) && ncol(Z) == 1)) {
+    Z <- matrix(Z, ncol = 1)
+  } else if (is.data.frame(Z) || is.matrix(Z)) {
+    Z <- as.matrix(Z)
+  } else {
+    stop("Z must be a numeric vector, matrix, or data frame.")
+  }
+  
   if (!is.numeric(Tr) || length(Tr) != nrow(Z)) stop("Tr must be a numeric vector.")
 
   # Apply NA action

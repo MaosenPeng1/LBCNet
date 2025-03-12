@@ -5,7 +5,7 @@
 #' The GSD is reported as a percentage and is widely used in propensity score weighting methods.
 #'
 #' @param object An optional object of class `"lbc_net"`, from which `Z`, `Tr`, and `weights` are extracted.
-#' @param Z A numeric matrix or vector of covariates. Required if `object` is not provided.
+#' @param Z A numeric matrix, data frame, or vector of covariates. Required if `object` is not provided.
 #' @param Tr A numeric vector (0/1) indicating treatment assignment. Required if `object` is not provided.
 #' @param ps A numeric vector of propensity scores (\eqn{0 < ps < 1}). 
 #'   Used to compute weights as:
@@ -119,10 +119,11 @@ gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 
     100 * (mu1 - mu0) / sqrt((ess1 * v1 + ess0 * v0) / (ess1 + ess0))
   }
 
-  # Apply over columns if `Z` is a matrix
-  if (is.matrix(Z)) {
-    return(apply(Z, 2, compute_gsd))
+  # Apply over columns if `Z` is a matrix or data frame
+  if (is.matrix(Z) || is.data.frame(Z)) {
+    return(apply(as.matrix(Z), 2, compute_gsd))
   } else {
-    return(compute_gsd(Z))  # Single covariate case
+    return(compute_gsd(Z))  # Single covariate case (vector)
   }
+  
 }
