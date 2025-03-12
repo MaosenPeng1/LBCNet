@@ -143,8 +143,8 @@ lsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, ck = NULL, h = NU
     return(abs(LSD))
   }
 
-  if (is.matrix(Z)) {
-    LSD_values <- apply(Z, 2, compute_lsd, ATE = ATE)
+  if (is.matrix(Z) || is.data.frame(Z)) {
+    LSD_values <- apply(as.matrix(Z), 2, compute_lsd, ATE = ATE)
   } else {
     LSD_values <- compute_lsd(Z, ATE = ATE)
   }
