@@ -13,18 +13,19 @@ gsd(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 1, ...)
 
 \item{Tr}{A numeric vector (0/1) indicating treatment assignment. Required if `object` is not provided.}
 
-\item{ps}{A numeric vector of propensity scores (`0 < ps < 1`). 
-Used to compute weights as `\omega^*(ps) / (Tr * ps + (1 - Tr) * (1 - ps))`. 
-The argument `ATE` must be specified: if `ATE = 1`, then `\omega^*(ps) = 1`; 
-if `ATE = 0`, then `\omega^*(ps) = ps`. Ignored if `wt` is provided.}
+\item{ps}{A numeric vector of propensity scores (\eqn{0 < ps < 1}). 
+Used to compute weights as:
+\deqn{\frac{w^*(ps)}{Tr \cdot ps + (1 - Tr) \cdot (1 - ps)}.}
+The argument \code{ATE} must be specified: if \code{ATE = 1}, then \eqn{w^*(ps) = 1}; 
+if \code{ATE = 0}, then \eqn{w^*(ps) = ps}. Ignored if \code{wt} is provided.}
 
 \item{wt}{A numeric vector of inverse probability weights (IPW) or other balancing weights. If provided, `ps` is ignored.}
 
 \item{ATE}{An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
 Average Treatment Effect (ATE) by weighting all observations equally. Setting it to 0 estimates the
 Average Treatment Effect on the Treated (ATT), where only treated units are fully weighted while control
-units are downweighted based on their propensity scores. See \code{\link{lbc_net}} for more information on ATT, ATE,
-and their corresponding weighting schemes.}
+units are downweighted based on their propensity scores. Ignored if \code{wt} is provided.
+See \code{\link{lbc_net}} for more information on ATT, ATE, and their corresponding weighting schemes.}
 
 \item{...}{Additional arguments passed to the specific method.}
 }
