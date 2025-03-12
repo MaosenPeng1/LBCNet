@@ -7,8 +7,16 @@
 #' @param object An optional object of class `"lbc_net"`, from which `Z`, `Tr`, and `weights` are extracted.
 #' @param Z A numeric matrix or vector of covariates. Required if `object` is not provided.
 #' @param Tr A numeric vector (0/1) indicating treatment assignment. Required if `object` is not provided.
-#' @param ps A numeric vector of propensity scores (`0 < ps < 1`). Used to compute weights as `1 / (Tr * ps + (1 - Tr) * (1 - ps))`. Ignored if `wt` is provided.
+#' @param ps A numeric vector of propensity scores (`0 < ps < 1`). 
+#'   Used to compute weights as `\omega^*(ps) / (Tr * ps + (1 - Tr) * (1 - ps))`. 
+#'   The argument `ATE` must be specified: if `ATE = 1`, then `\omega^*(ps) = 1`; 
+#'   if `ATE = 0`, then `\omega^*(ps) = ps`. Ignored if `wt` is provided.
 #' @param wt A numeric vector of inverse probability weights (IPW) or other balancing weights. If provided, `ps` is ignored.
+#' @param ATE An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
+#'   Average Treatment Effect (ATE) by weighting all observations equally. Setting it to 0 estimates the
+#'   Average Treatment Effect on the Treated (ATT), where only treated units are fully weighted while control
+#'   units are downweighted based on their propensity scores. See \code{\link{lbc_net}} for more information on ATT, ATE,
+#'   and their corresponding weighting schemes.
 #' @param ... Additional arguments passed to the specific method.
 #'
 #' @return A numeric vector containing GSD values for each covariate.
@@ -63,7 +71,7 @@
 #' gsd(model)
 #' }
 #' @export
-gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ...) {
+gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 1, ...) {
   # Extract from `lbc_net` object if provided
   if (!is.null(object)) {
     if (!inherits(object, "lbc_net")) {
@@ -72,6 +80,7 @@ gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ...) {
     Z <- getLBC(object, "Z")  # Extract covariates
     Tr <- getLBC(object, "Tr")  # Extract treatment
     wt <- getLBC(object, "weights")  # Extract weights
+    ATE <- getLBC(object, "ATE")
   }
 
   # Ensure required inputs are provided
@@ -88,7 +97,8 @@ gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ...) {
     if (any(ps <= 0 | ps >= 1)) {
       stop("Error: `ps` (propensity scores) must be strictly between 0 and 1.")
     }
-    wt <- 1 / (Tr * ps + (1 - Tr) * (1 - ps))  # Convert ps to weights
+    w_star <- if (ATE == 1) rep(1, N) else ps
+    wt <- w_star / (Tr * ps + (1 - Tr) * (1 - ps))
   }
 
   # Ensure weights are available

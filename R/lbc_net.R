@@ -452,7 +452,8 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   lsd_mean <- result$mean_lsd
 
   # Compute inverse probability weights (IPW)
-  ipw <- 1 / (propensity_scores * Tr + (1 - propensity_scores) * (1 - Tr))
+  w_star <- if (ATE == 1) rep(1, N) else propensity_scores
+  ipw <- w_star / (Tr * propensity_scores + (1 - Tr) * (1 - propensity_scores))
 
   out <- list(
     fitted.values = propensity_scores,
