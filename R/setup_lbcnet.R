@@ -13,6 +13,9 @@
 #' @param create_if_missing Logical. If `TRUE`, the function creates the specified virtual environment (`envname`) if it does not exist.
 #'   Default is `FALSE`, meaning it will only warn if `envname` is missing and list available environments.
 #'   This applies only when `use_conda = FALSE`, as Conda environments must be created manually.
+#' @param system_python_path A character string specifying the full path to a system Python executable.
+#'   If provided and `use_system_python = TRUE`, it overrides `Sys.which("python")`.
+#'   Default is `NULL`.
 #' 
 #' @return This function configures the Python environment but does not return any value.
 #' @details
@@ -39,7 +42,7 @@
 #'
 #' @importFrom reticulate use_python use_virtualenv use_condaenv py_config py_module_available py_install
 #' @export
-setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_python = FALSE, create_if_missing = FALSE) {
+setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_python = FALSE, create_if_missing = FALSE, system_python_path = NULL) {
   message("LBCNet: Configuring Python environment...")
   
   required_modules <- c("torch", "numpy", "pandas", "tqdm")
@@ -91,15 +94,31 @@ setup_lbcnet <- function(use_conda = FALSE, envname = "r-lbcnet", use_system_pyt
   
   # Case 1: User explicitly chooses system Python
   # Define system Python path
-  system_python <- Sys.which("python")
   if (use_system_python) {
-    if (nzchar(system_python)) {
-      reticulate::use_python(system_python, required = TRUE)
-      message("Using system Python: ", system_python)
+    
+    # Use the explicitly provided system_python_path
+    if (!is.null(system_python_path)) {
+      # Check if file exists at the given path
+      if (!file.exists(system_python_path)) {
+        stop("The specified system_python_path does not exist: ", system_python_path)
+      }
+      # Use the provided Python path
+      reticulate::use_python(system_python_path, required = TRUE)
+      message("Using specified system Python path: ", system_python_path)
+      
     } else {
-      stop("No system Python found! Please install Python and configure reticulate.")
+      # Fallback to Sys.which("python")
+      system_python <- Sys.which("python")
+      
+      if (nzchar(system_python)) {
+        reticulate::use_python(system_python, required = TRUE)
+        message("Using system Python found via Sys.which: ", system_python)
+      } else {
+        stop("No system Python found! Please install Python or specify system_python_path.")
+      }
     }
-    return(invisible(NULL))  # Exit the function since the user has chosen system Python.
+    
+    return(invisible(NULL))  # Exit the function since the user chose system Python
   }
   
   message("No active Python environment detected. Detecting available environments...")

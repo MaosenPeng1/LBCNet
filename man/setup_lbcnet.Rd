@@ -8,7 +8,8 @@ setup_lbcnet(
   use_conda = FALSE,
   envname = "r-lbcnet",
   use_system_python = FALSE,
-  create_if_missing = FALSE
+  create_if_missing = FALSE,
+  system_python_path = NULL
 )
 }
 \arguments{
@@ -24,6 +25,10 @@ Default is `FALSE`. If both `use_system_python = TRUE` and `use_conda = TRUE`, t
 \item{create_if_missing}{Logical. If `TRUE`, the function creates the specified virtual environment (`envname`) if it does not exist.
 Default is `FALSE`, meaning it will only warn if `envname` is missing and list available environments.
 This applies only when `use_conda = FALSE`, as Conda environments must be created manually.}
+
+\item{system_python_path}{A character string specifying the full path to a system Python executable.
+If provided and `use_system_python = TRUE`, it overrides `Sys.which("python")`.
+Default is `NULL`.}
 }
 \value{
 This function configures the Python environment but does not return any value.
