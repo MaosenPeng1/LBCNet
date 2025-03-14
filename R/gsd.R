@@ -98,6 +98,7 @@ gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 
     if (any(ps <= 0 | ps >= 1)) {
       stop("Error: `ps` (propensity scores) must be strictly between 0 and 1.")
     }
+    N <- length(ps)
     w_star <- if (ATE == 1) rep(1, N) else ps
     wt <- w_star / (Tr * ps + (1 - Tr) * (1 - ps))
   }

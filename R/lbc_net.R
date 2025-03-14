@@ -460,6 +460,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   lsd_mean <- result$mean_lsd
 
   # Compute inverse probability weights (IPW)
+  N <- length(propensity_scores)
   w_star <- if (ATE == 1) rep(1, N) else propensity_scores
   ipw <- w_star / (Tr * propensity_scores + (1 - Tr) * (1 - propensity_scores))
 
