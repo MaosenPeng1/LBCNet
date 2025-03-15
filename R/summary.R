@@ -11,16 +11,16 @@
 #'   - `"ATE"` (default): Computes the Average Treatment Effect.
 #'   - `"ATT"`: Computes the Average Treatment Effect on the Treated.
 #'
-#' @param compute_gsd Logical; if `TRUE` (default), computes the Global Standardized Mean Difference (GSD) for balance assessment.
 #' @param ... Additional arguments (ignored).
 #'
-#' @return A structured summary of the `lbc_net` object, including:
-#' \itemize{
-#'   \item Losses: `balance_loss`, `calibration_loss`, `total_loss`.
-#'   \item Local balance summary: `lsd_max`, `lsd_mean` for local standardized mean difference calculated during training.
-#'   \item Sample characteristics: `sample_size`, `num_covariates`, `treated_size`, `control_size`.
-#'   \item Global balance (if computed): global standardized mean difference.
-#'   \item Estimated treatment effect (if `Y` is provided).
+#' @return A list containing:
+#' \describe{
+#'   \item{\code{sample_info}}{Sample sizes and covariate counts.}
+#'   \item{\code{losses}}{Training losses.}
+#'   \item{\code{local_balance}}{Local standardized differences from training.}
+#'   \item{\code{balance_table}}{Pre- and post-weighting global standardized differences (GSD).}
+#'   \item{\code{treatment_effect}}{Estimated treatment effect, if applicable.}
+#'   \item{\code{gsd}}{GSD after weighting.}
 #' }
 #'
 #' @details
@@ -39,10 +39,14 @@
 #' model <- lbc_net(data = data, formula = Tr ~ X1 + X2 + X3 + X4)
 #' summary(model)  # Summary without treatment effect estimation
 #' summary(model, Y = my_outcome, type = "ATE")  # Summary including treatment effect
+#' 
+#' out <- summary(model)
+#' names(out)
+#' out$balance_table
 #' }
 #'
 #' @export
-summary.lbc_net <- function(object, Y = NULL, type = "ATE", compute_gsd = TRUE, ...) {
+summary.lbc_net <- function(object, Y = NULL, type = "ATE", ...) {
 
   if (!is.null(object)) {
     if (!inherits(object, "lbc_net")) {
@@ -69,13 +73,19 @@ summary.lbc_net <- function(object, Y = NULL, type = "ATE", compute_gsd = TRUE, 
   treated_size <- sum(Tr)
   control_size <- sample_size - treated_size
 
+  # Compute pre-weighting GSD (weights = 1 for all observations)
+  gsd_values_before <- gsd(Z = Z, Tr = Tr, wt = rep(1, sample_size))
+  
   # Compute global standardized difference (GSD) if requested
-  if (compute_gsd) {
-    gsd_values <- gsd(object)
-  } else {
-    gsd_values <- NULL
-  }
-
+  gsd_values_after <- gsd(object)
+  
+  # Combine into a table
+  balance_table <- data.frame(
+    Covariate = names(gsd_values_after),
+    Pre_Weighting_GSD = as.numeric(gsd_values_before),
+    Post_Weighting_GSD = as.numeric(gsd_values_after)
+  )
+  
   # Compute treatment effect if Y is provided
   if (!is.null(Y)) {
     if (length(Y) != sample_size) {
@@ -103,31 +113,26 @@ summary.lbc_net <- function(object, Y = NULL, type = "ATE", compute_gsd = TRUE, 
   cat(sprintf("--- Local Balance (LSD) %s ---\n", "%"))
   cat(sprintf("Max LSD:   %.4f\n", lsd_train$lsd_max))
   cat(sprintf("Mean LSD:  %.4f\n\n", lsd_train$lsd_mean))
-
-  if (compute_gsd) {
-    cat(sprintf("--- Global Balance (GSD) %s ---\n", "%"))
-    # Convert GSD named vector to a dataframe
-    gsd_df <- data.frame(
-      Covariate = names(gsd_values),
-      GSD = sprintf("%.4f", as.numeric(gsd_values))
-    )
-
-    # Define column width for alignment
-    max_name_length <- max(nchar(gsd_df$Covariate)) + 2  # Adjust spacing
-    formatted_covariate <- format(gsd_df$Covariate, width = max_name_length, justify = "left")
-    formatted_gsd <- format(gsd_df$GSD, width = 7, justify = "right")
-
-    cat(format("Covariates", width = max_name_length, justify = "left"),
-        format("GSD %", width = 7, justify = "right"), "\n")
-    cat(strrep("-", max_name_length + 9), "\n")
-
-    # Print table with proper alignment
-    for (i in seq_along(formatted_covariate)) {
-      cat(formatted_covariate[i], formatted_gsd[i], "\n")
-    }
-
-    cat("\n")
+  
+  cat(sprintf("--- Global Standardized Differences (GSD) %s ---\n", "%"))
+  
+  # Format for printing
+  cov_names <- format(balance_table$Covariate, width = max(nchar(balance_table$Covariate)) + 2, justify = "left")
+  pre_gsd_fmt <- format(sprintf("%.4f", balance_table$Pre_Weighting_GSD), width = 12, justify = "right")
+  post_gsd_fmt <- format(sprintf("%.4f", balance_table$Post_Weighting_GSD), width = 12, justify = "right")
+  
+  # Header row
+  cat(format("Covariate", width = max(nchar(balance_table$Covariate)) + 2, justify = "left"),
+      format("Pre-GSD", width = 12, justify = "right"),
+      format("Post-GSD", width = 12, justify = "right"), "\n")
+  
+  cat(strrep("-", max(nchar(balance_table$Covariate)) + 30), "\n")
+  
+  # Print each row
+  for (i in seq_along(cov_names)) {
+    cat(cov_names[i], pre_gsd_fmt[i], post_gsd_fmt[i], "\n")
   }
+  cat("\n")
 
   cat("--- Treatment Effect Estimate ---\n")
   if (is.null(Y)) {
@@ -139,6 +144,33 @@ summary.lbc_net <- function(object, Y = NULL, type = "ATE", compute_gsd = TRUE, 
     # Print the effect estimate with four decimal places
     cat(sprintf("%s: %.4f\n", effect_label, effect))
   }
+  
+  # Return object
+  summary_list <- list(
+    sample_info = list(
+      sample_size = sample_size,
+      treated_size = treated_size,
+      control_size = control_size,
+      num_covariates = num_covariates
+    ),
+    losses = losses,
+    local_balance = list(
+      lsd_max = lsd_train$lsd_max,
+      lsd_mean = lsd_train$lsd_mean
+    ),
+    balance_table = balance_table,
+    treatment_effect = if (!is.null(Y)) {
+      list(
+        type = effect_label,
+        estimate = effect
+      )
+    } else {
+      NULL
+    },
+    gsd = gsd_values_after
+  )
+  
+  invisible(summary_list)
 
 }
 
