@@ -88,9 +88,24 @@ gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 
   if (is.null(Z) || is.null(Tr)) {
     stop("Error: Must provide `Z` (covariates) and `Tr` (treatment assignment), or an `lbc_net` object.")
   }
-
+  
+  # Coerce Z to a matrix and handle vectors
+  if (is.vector(Z)) {
+    Z <- matrix(Z, ncol = 1)
+    colnames(Z) <- "V1"
+  }
+  
+  if (is.data.frame(Z)) {
+    Z <- as.matrix(Z)
+  }
+  
+  if (!is.matrix(Z)) {
+    stop("Error: `Z` must be a numeric vector, matrix, or data frame.")
+  }
+  
+  # Add column names if missing
   if (is.null(colnames(Z))) {
-    colnames(Z) <- paste0("V", seq_len(ncol(Z)))  # Assign generic names V1, V2, V3, ...
+    colnames(Z) <- paste0("V", seq_len(ncol(Z)))
   }
 
   # Convert propensity scores to weights if necessary
