@@ -11,6 +11,7 @@ mirror_hist(
   bins = 70,
   size = 0.5,
   theme.size = 15,
+  grid = TRUE,
   ...
 )
 }
@@ -28,6 +29,8 @@ Required if `object` is not provided.}
 \item{size}{Numeric specifying the line size for the histogram bars. Default is 0.5.}
 
 \item{theme.size}{Numeric specifying the base font size for the theme. Default is `15`.}
+
+\item{grid}{Logical indicating whether to include gridlines in the plot background. Default is `TRUE`.}
 
 \item{...}{Additional arguments passed to `ggplot2` layers for customization.}
 }

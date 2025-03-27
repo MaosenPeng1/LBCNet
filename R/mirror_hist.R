@@ -14,6 +14,7 @@ utils::globalVariables(c("count"))
 #' @param bins Integer specifying the number of bins in the histogram. Default is 70.
 #' @param size Numeric specifying the line size for the histogram bars. Default is 0.5.
 #' @param theme.size Numeric specifying the base font size for the theme. Default is `15`.
+#' @param grid Logical indicating whether to include gridlines in the plot background. Default is `TRUE`.
 #'
 #' @param ... Additional arguments passed to `ggplot2` layers for customization.
 #'
@@ -41,8 +42,9 @@ utils::globalVariables(c("count"))
 #' @importFrom ggplot2 theme element_blank element_line element_text
 #' @importFrom dplyr filter
 #' @export
-mirror_hist <- function(object = NULL, ps = NULL, Tr = NULL, bins = 70, size = 0.5, theme.size = 15, ...) {
-
+mirror_hist <- function(object = NULL, ps = NULL, Tr = NULL, bins = 70, size = 0.5, 
+                        theme.size = 15, grid = TRUE, ...) {
+  
   if (!is.null(object)) {
     if (!inherits(object, "lbc_net")) {
       stop("Error: `object` must be of class 'lbc_net'.")
@@ -50,13 +52,13 @@ mirror_hist <- function(object = NULL, ps = NULL, Tr = NULL, bins = 70, size = 0
     ps <- getLBC(object, "fitted.values")
     Tr <- getLBC(object, "Tr")
   }
-
+  
   if (is.null(ps) || is.null(Tr)) {
     stop("Error: Must provide either an `lbc_net` object or both `ps` and `Tr`.")
   }
-
+  
   data <- data.frame(ps = ps, Z = Tr)
-
+  
   plot <- ggplot2::ggplot(data, ggplot2::aes(x = ps)) +
     ggplot2::geom_histogram(ggplot2::aes(y = after_stat(count)), fill = "white", color = 'black',
                             data = ~ dplyr::filter(., Z == 0), bins = bins, size = size, ...) +
@@ -71,7 +73,12 @@ mirror_hist <- function(object = NULL, ps = NULL, Tr = NULL, bins = 70, size = 0
                    plot.title = ggplot2::element_text(size = theme.size),
                    legend.text = ggplot2::element_text(size = theme.size),
                    legend.title = ggplot2::element_text(size = theme.size))
-
+  
+  if (grid) {
+    plot <- plot + ggplot2::theme(panel.grid.major = ggplot2::element_line(color = "grey90"),
+                                  panel.grid.minor = ggplot2::element_line(color = "grey95"))
+  }
+  
   return(plot)
 }
 

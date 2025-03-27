@@ -99,18 +99,33 @@ plot_cov_bal <- function(object = NULL,
     wt = wt
   )
   
+  is_categorical <- is.factor(plot_data$covariate_value) || length(unique(plot_data$covariate_value)) <= 5
+  
+  if (is_categorical) {
+    plot_data$covariate_value <- factor(plot_data$covariate_value)
+    plot_type <- "hist"
+  }
+  
   # Create the plot base
   p <- ggplot2::ggplot(plot_data, ggplot2::aes(x = covariate_value, weight = wt, fill = Tr, color = Tr))
   
   # Add the appropriate plot layer
-  if (plot_type == "density") {
+  if (plot_type == "density" && !is_categorical) {
     p <- p +
       ggplot2::geom_density(alpha = alpha, ...) +
       ggplot2::scale_fill_manual(values = c("0" = color_control, "1" = color_treated)) +
       ggplot2::scale_color_manual(values = c("0" = color_control, "1" = color_treated))
-  } else if (plot_type == "hist") {
+  } else {
+    if (is_categorical) {
+      p <- p +
+        ggplot2::geom_bar(alpha = alpha, position = "dodge", ...) +
+        ggplot2::scale_x_discrete(drop = FALSE)
+    } else {
+      p <- p +
+        ggplot2::geom_histogram(alpha = alpha, bins = bins, position = "identity", ...)
+    }
+    
     p <- p +
-      ggplot2::geom_histogram(alpha = alpha, bins = bins, position = "identity", ...) +
       ggplot2::scale_fill_manual(values = c("0" = color_control, "1" = color_treated)) +
       ggplot2::scale_color_manual(values = c("0" = color_control, "1" = color_treated))
   }
