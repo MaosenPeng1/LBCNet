@@ -121,8 +121,15 @@ def run_lbc_net(data_df, Z_columns, T_column, ck, h,
         torch.backends.cudnn.deterministic = True
 
     # Convert `ck` and `h` into PyTorch tensors
+    # Ensure ck and h are always at least 1D tensors
+    if not isinstance(ck, (list, tuple)):
+        ck = [ck]
+    if not isinstance(h, (list, tuple)):
+        h = [h]
+
     ck = torch.tensor(ck, dtype=torch.float32).to(device)
     h = torch.tensor(h, dtype=torch.float32).to(device)
+
 
     # Convert DataFrame to Tensors
     Z_numpy = data_df.loc[:, Z_columns].to_numpy(dtype="float32")  # Explicit NumPy conversion

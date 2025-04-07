@@ -78,7 +78,7 @@ plot_cov_bal <- function(object = NULL,
   }
   
   # Set weights if NULL (unweighted)
-  if (is.null(wt)) {
+  if (!use_weights || is.null(wt)) {
     wt <- rep(1, length(Tr))
   }
   

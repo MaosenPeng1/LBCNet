@@ -413,7 +413,6 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
     h <- span_bw(rho, ck, ps_log)
   } else {
     if (!is.numeric(h)) stop("`h` must be a numeric vector.")
-    if (length(h) == 1) stop("`h` must be a vector, not a single numeric value.")
     if (length(h) != length(ck)) stop("`h` must have the same length as `ck`.")
   }
 
