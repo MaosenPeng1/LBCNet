@@ -11,7 +11,7 @@ test_that("lsd correctly calculates Local Standardized Mean Difference", {
 
   # ---- Expected Structure Tests ----
   expect_s3_class(lsd_result, "lsd")  # Should return an `lsd` object
-  expect_named(lsd_result, c("LSD", "LSD_mean", "LSD_max", "ck", "h", "Z", "Tr", "K", "rho", "kernel", "ATE"))
+  expect_named(lsd_result, c("LSD", "LSD_mean", "LSD_max", "ck", "h", "Z", "Tr", "K", "rho", "kernel", "ate_flag"))
 
   # ---- Output Validity Tests ----
   expect_type(lsd_result$LSD, "double")  # LSD should be numeric

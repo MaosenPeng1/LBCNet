@@ -69,55 +69,64 @@ utils::globalVariables(c("x", "y"))
 #'
 #' @export
 plot.lsd <- function(x, y = NULL, cov = "ALL", ...) {
-
+  
   # Extract additional plot parameters from ...
   args <- list(...)
-  box.loc <- if (!is.null(args$box.loc)) args$box.loc else seq(0.1, 0.9, by = 0.2)
-  point.color <- if (!is.null(args$point.color)) args$point.color else "#9467bd"
-  point.size <- if (!is.null(args$point.size)) args$point.size else 0.8
-  line.size <- if (!is.null(args$line.size)) args$line.size else 0.5
-  line.color <- if (!is.null(args$line.color)) args$line.color else "black"
-  theme.size <- if (!is.null(args$theme.size)) args$theme.size else 15
+  box.loc       <- if (!is.null(args$box.loc))       args$box.loc       else seq(0.1, 0.9, by = 0.2)
+  point.color   <- if (!is.null(args$point.color))   args$point.color   else "#9467bd"
+  point.size    <- if (!is.null(args$point.size))    args$point.size    else 0.8
+  line.size     <- if (!is.null(args$line.size))     args$line.size     else 0.5
+  line.color    <- if (!is.null(args$line.color))    args$line.color    else "black"
+  theme.size    <- if (!is.null(args$theme.size))    args$theme.size    else 15
   boxplot.width <- if (!is.null(args$boxplot.width)) args$boxplot.width else 0.02
   outlier.shape <- if (!is.null(args$outlier.shape)) args$outlier.shape else 4
-  outlier.size <- if (!is.null(args$outlier.size)) args$outlier.size else 1
-
+  outlier.size  <- if (!is.null(args$outlier.size))  args$outlier.size  else 1
+  
   object <- x  # Match base R’s plot() generic where 'x' is the first argument
   if (!inherits(object, "lsd")) {
     stop("Error: `object` must be of class 'lsd'.")
   }
-
-  LSD <- object$LSD
-  Z <- object$Z
-  ck <- object$ck
+  
+  LSD  <- object$LSD
+  Z    <- object$Z
+  ck   <- object$ck
   p_dim <- ncol(Z)
-
+  
   if (cov == "ALL") {
     lsd.colmean <- rowMeans(LSD)
     ds.plot <- data.frame(x = ck, y = lsd.colmean)
-
+    
     p <- ggplot2::ggplot(ds.plot, ggplot2::aes(x = x, y = y)) +
       ggplot2::geom_point(size = point.size, color = point.color) +
-      ggplot2::geom_line(size = line.size, color = line.color) +
+      ggplot2::geom_line(linewidth = line.size, color = line.color) +
       ggplot2::theme_bw(base_size = theme.size) +
-      ggplot2::theme(panel.grid.major = ggplot2::element_blank(),
-                     panel.grid.minor = ggplot2::element_blank(),
-                     axis.title = ggplot2::element_text(size = theme.size),
-                     axis.text = ggplot2::element_text(size = theme.size),
-                     legend.text = ggplot2::element_text(size = theme.size),
-                     legend.title = ggplot2::element_text(size = theme.size)) +
+      ggplot2::theme(
+        panel.grid.major = ggplot2::element_blank(),
+        panel.grid.minor = ggplot2::element_blank(),
+        axis.title       = ggplot2::element_text(size = theme.size),
+        axis.text        = ggplot2::element_text(size = theme.size),
+        legend.text      = ggplot2::element_text(size = theme.size),
+        legend.title     = ggplot2::element_text(size = theme.size)
+      ) +
       ggplot2::labs(x = "Propensity Score", y = "LSD(%)")
-
+    
     if (!is.null(box.loc)) {
       ds.box <- as.data.frame(LSD) %>%
-        tidyr::pivot_longer(cols = tidyselect::everything(), names_to = "Z", values_to = "y") %>%
+        tidyr::pivot_longer(cols = tidyselect::everything(),
+                            names_to = "Z", values_to = "y") %>%
         dplyr::mutate(x = rep(ck, each = p_dim)) %>%
         dplyr::filter(sapply(x, function(val) any(dplyr::near(val, box.loc))))
-
-      p <- p + ggplot2::geom_boxplot(data = ds.box, ggplot2::aes(x = x, y = y, group = x),
-                                     outlier.shape = outlier.shape, outlier.size = outlier.size,
-                                     width = boxplot.width, color = point.color)
+      
+      p <- p + ggplot2::geom_boxplot(
+        data  = ds.box,
+        ggplot2::aes(x = x, y = y, group = x),
+        outlier.shape = outlier.shape,
+        outlier.size  = outlier.size,
+        width         = boxplot.width,
+        color         = point.color
+      )
     }
+    
   } else {
     if (is.numeric(cov)) {
       if (cov < 1 || cov > ncol(LSD)) {
@@ -130,12 +139,15 @@ plot.lsd <- function(x, y = NULL, cov = "ALL", ...) {
       }
       lsd.colmean <- LSD[, cov]
     }
+    
     ds.plot <- data.frame(x = ck, y = lsd.colmean)
     p <- ggplot2::ggplot(ds.plot, ggplot2::aes(x = x, y = y)) +
       ggplot2::geom_point(size = point.size, color = point.color) +
-      ggplot2::geom_line(size = line.size, color = line.color) +
+      ggplot2::geom_line(linewidth = line.size, color = line.color) +
       ggplot2::theme_bw(base_size = theme.size) +
       ggplot2::labs(x = "Propensity Score", y = "LSD(%)")
   }
+  
   return(p)
 }
+

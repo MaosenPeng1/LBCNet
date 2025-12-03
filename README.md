@@ -9,6 +9,17 @@ and local calibration, which guarantees that the balancing scores are mapped to 
 develops a nonparametric propensity score model that effectively optimizes covariate balance, minimizes bias, and stabilizes inverse probability of 
 treatment weights (IPTW).
 
+In addition to estimating ATE and ATT for binary treatments, LBCNet provides a unified interface for:
+
+- **Variance estimation**: plug-in influence functions, model-based uncertainty quantification, and 
+  robust standard errors for IPTW and LBC-Net–based estimators.
+- **Survival estimands**: risk difference and survival difference at a fixed time \( t \), with 
+  support for IPW–adjusted Kaplan–Meier and Nelson–Aalen estimators.
+
+The package integrates R and Python modules to deliver a scalable, easy-to-use workflow for modern 
+causal inference research, including treatment effect estimation, sensitivity analysis, and evaluation of 
+covariate balance under learned propensity score models.
+
 ## Installing Python
 
 LBCNet requires Python to be installed on your system. You can download and install Python from the official website:

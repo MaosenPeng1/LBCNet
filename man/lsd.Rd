@@ -14,7 +14,7 @@ lsd(
   K = 99,
   rho = 0.15,
   kernel = "gaussian",
-  ATE = 1,
+  ate_flag = 1,
   ...
 )
 }
@@ -37,7 +37,7 @@ lsd(
 
 \item{kernel}{The kernel function used. Options are "gaussian", "uniform", or "epanechnikov". Default is "gaussian".}
 
-\item{ATE}{An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
+\item{ate_flag}{An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
 Average Treatment Effect (ATE) by weighting all observations equally. Setting it to 0 estimates the
 Average Treatment Effect on the Treated (ATT), where only treated units are fully weighted while control
 units are downweighted based on their propensity scores. See Details in \code{\link{lbc_net}}.}

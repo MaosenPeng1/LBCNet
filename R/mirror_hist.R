@@ -42,7 +42,7 @@ utils::globalVariables(c("count"))
 #' @importFrom ggplot2 theme element_blank element_line element_text
 #' @importFrom dplyr filter
 #' @export
-mirror_hist <- function(object = NULL, ps = NULL, Tr = NULL, bins = 70, size = 0.5, 
+mirror_hist <- function(object = NULL, ps = NULL, Tr = NULL, bins = 70, size = 0.5,
                         theme.size = 15, grid = TRUE, ...) {
   
   if (!is.null(object)) {
@@ -57,26 +57,62 @@ mirror_hist <- function(object = NULL, ps = NULL, Tr = NULL, bins = 70, size = 0
     stop("Error: Must provide either an `lbc_net` object or both `ps` and `Tr`.")
   }
   
-  data <- data.frame(ps = ps, Z = Tr)
+  data <- data.frame(
+    ps = ps,
+    Z  = Tr
+  )
   
   plot <- ggplot2::ggplot(data, ggplot2::aes(x = ps)) +
-    ggplot2::geom_histogram(ggplot2::aes(y = after_stat(count)), fill = "white", color = 'black',
-                            data = ~ dplyr::filter(., Z == 0), bins = bins, size = size, ...) +
-    ggplot2::geom_histogram(ggplot2::aes(y = -after_stat(count)), fill = "white", color = 'black',
-                            data = ~ dplyr::filter(., Z == 1), bins = bins, size = size, ...) +
+    # Control group (Z = 0) on top
+    ggplot2::geom_histogram(
+      ggplot2::aes(
+        y    = after_stat(count),
+        fill = "Control (Z = 0)"
+      ),
+      data      = ~ dplyr::filter(., Z == 0),
+      bins      = bins,
+      linewidth = size,
+      color     = "black",
+      ...
+    ) +
+    # Treated group (Z = 1) on bottom (mirrored)
+    ggplot2::geom_histogram(
+      ggplot2::aes(
+        y    = -after_stat(count),
+        fill = "Treated (Z = 1)"
+      ),
+      data      = ~ dplyr::filter(., Z == 1),
+      bins      = bins,
+      linewidth = size,
+      color     = "black",
+      ...
+    ) +
     ggplot2::geom_hline(yintercept = 0) +
+    ggplot2::scale_fill_manual(
+      name   = "Group",
+      values = c(
+        "Control (Z = 0)" = "grey70",
+        "Treated (Z = 1)" = "#9467bd"
+      )
+    ) +
     ggplot2::labs(x = "Propensity Score", y = "Frequency") +
-    ggplot2::theme(panel.background = ggplot2::element_blank(),
-                   axis.line = ggplot2::element_line(colour = "black"),
-                   axis.title = ggplot2::element_text(size = theme.size),
-                   axis.text = ggplot2::element_text(size = theme.size),
-                   plot.title = ggplot2::element_text(size = theme.size),
-                   legend.text = ggplot2::element_text(size = theme.size),
-                   legend.title = ggplot2::element_text(size = theme.size))
+    ggplot2::theme(
+      legend.position  = "bottom",
+      panel.background = ggplot2::element_blank(),
+      axis.line        = ggplot2::element_line(colour = "black"),
+      axis.title       = ggplot2::element_text(size = theme.size),
+      axis.text        = ggplot2::element_text(size = theme.size),
+      plot.title       = ggplot2::element_text(size = theme.size),
+      legend.text      = ggplot2::element_text(size = theme.size),
+      legend.title     = ggplot2::element_text(size = theme.size)
+    )
   
   if (grid) {
-    plot <- plot + ggplot2::theme(panel.grid.major = ggplot2::element_line(color = "grey90"),
-                                  panel.grid.minor = ggplot2::element_line(color = "grey95"))
+    plot <- plot +
+      ggplot2::theme(
+        panel.grid.major = ggplot2::element_line(color = "grey90"),
+        panel.grid.minor = ggplot2::element_line(color = "grey95")
+      )
   }
   
   return(plot)

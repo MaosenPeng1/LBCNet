@@ -4,6 +4,10 @@
 #' a deep learning method designed to enhance covariate balance.
 #' It integrates a Variational Autoencoder (VAE) with a customized
 #' neural network to estimate treatment probabilities for causal inference.
+#' 
+#' When an outcome `Y` is supplied, `lbc_net` also computes inverse probability
+#' weighted (IPW) estimates of the causal effect (ATE or ATT) and, when enabled,
+#' corresponding influence-function–based standard errors and confidence intervals.
 #'
 #' @param data an optional data frame, list, or environment (or an object
 #'   coercible by `as.data.frame` to a data frame) containing the variables
@@ -25,12 +29,25 @@
 #' @param Tr A numeric vector representing treatment assignment (typically 0/1).
 #'   Required if `formula` is not provided. Must have the same number of rows
 #'   as `Z`. If `formula` is used, `Tr` is extracted from `data` automatically.
+#'   
+#' @param Y Optional numeric vector of observed outcomes. If provided, `lbc_net`
+#'   will, in addition to estimating propensity scores, compute inverse probability
+#'   weighted estimates of a causal estimand (e.g., ATE or ATT) using the fitted
+#'   LBC-Net model. `Y` can be continuous or binary; the IPW formula is the same,
+#'   only the interpretation differs.
 #'
-#' @param ATE An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
-#'   Average Treatment Effect (ATE) by weighting all observations equally. Setting it to 0 estimates the
-#'   Average Treatment Effect on the Treated (ATT), where only treated units are fully weighted while control
-#'   units are downweighted based on their propensity scores. See **Details** for more information on ATT, ATE,
-#'   and their corresponding weighting schemes.
+#' @param estimand Character string specifying the target estimand when an outcome
+#'   `Y` is supplied. Available options are:
+#'   \describe{
+#'     \item{`"ATE"`}{Average Treatment Effect. The frequency weight function
+#'       \eqn{\omega^{*}(p_i) = 1} targets the combined population.}
+#'     \item{`"ATT"`}{Average Treatment Effect on the Treated. The frequency weight
+#'       function \eqn{\omega^{*}(p_i) = p_i} upweights units that are likely to be treated.}
+#'     \item{`"Y"`}{Weighted mean outcome among the treated group, using IPW weights
+#'       derived from the fitted propensity scores.}
+#'   }
+#'   If `Y` is `NULL`, `estimand` is ignored and `lbc_net` only fits the propensity model. 
+#'   See **Details** for more information on ATT, ATE, and their corresponding weighting schemes.
 #'
 #' @param K an integer specifying the number of grid center points used to
 #'   compute kernel weights in the local neighborhood. These weights are
@@ -284,21 +301,28 @@
 #' data <- data.frame(Y, Tr, X)
 #' colnames(data) <- c("Y", "Tr", "X1", "X2", "X3", "X4")
 #'
-#' # --- Fit the LBC-Net Model ---
+#' # --- Fit the LBC-Net Model (propensity only) ---
 #'
-#' # Option 1: Using formula input
-#' model <- lbc_net(data = data, formula = Tr ~ X1 + X2 + X3 + X4)
+#' # Option 1: Using formula input (PS + diagnostics only)
+#' model_ps <- lbc_net(data = data, formula = Tr ~ X1 + X2 + X3 + X4)
 #'
 #' # Option 2: Directly using Z and Tr
-#' model <- lbc_net(Z = X, Tr = Tr)
+#' model_ps2 <- lbc_net(Z = X, Tr = Tr)
 #'
-#' # --- Summarize Model Results ---
-#' print(model)         # Print basic model output
-#' summary(model)       # Summarize model results
+#' # --- Fit the LBC-Net Model and estimate ATE in one step ---
+#' model_ate <- lbc_net(
+#'   data     = data,
+#'   formula  = Tr ~ X1 + X2 + X3 + X4,
+#'   Y        = data$Y,
+#'   estimand = "ATE"
+#' )
 #'
-#' # Evaluate treatment effect estimates
-#' summary(model, Y = Y, type = "Y")    # See outcome estimates
-#' summary(model, Y = Y, type = "ATE")  # Average treatment effect
+#' print(model_ate)          # basic print
+#' summary(model_ate)        # may show effect and PS summaries
+#'
+#' # Extract effect and SE
+#' getLBC(model_ate, "effect")
+#' getLBC(model_ate, "se")
 #'
 #' # --- Performance Evaluation ---
 #'
@@ -317,8 +341,8 @@
 #' @importFrom reticulate source_python
 #'
 #' @export
-lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
-                    ATE = 1, K = 99, rho = 0.15, na.action = na.fail,
+lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
+                    estimand = c("ATE", "ATT", "Y"), K = 99, rho = 0.15, na.action = na.fail,
                     gpu = 0, show_progress = TRUE, ..., setup_lbcnet_args = list()) {
   
   # Ensure Python is properly configured before running setup
@@ -328,6 +352,9 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   } else {
     message("Python is already set up. Skipping `setup_lbcnet()`.")
   }
+  
+  estimand <- match.arg(estimand)
+  ate_flag <- if (estimand %in% c("ATE", "Y")) 1L else 0L
 
   # Extract additional parameters from ...
   args <- list(...)
@@ -381,18 +408,66 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   }
   
   if (!is.numeric(Tr) || length(Tr) != nrow(Z)) stop("Tr must be a numeric vector.")
+  
+  if (!is.null(Y)) {
+    if (!is.numeric(Y)) stop("Y must be numeric when provided.")
+    if (length(Y) != nrow(Z)) {
+      stop("Y must have the same length as the number of rows in Z.")
+    }
+  }
+  
+  # ---- Outcome leakage detection ----
+  if (!is.null(Y)) {
+    # Find columns identical to Y
+    matching_cols <- vapply(
+      data,
+      function(col) isTRUE(all.equal(col, Y)),
+      logical(1)
+    )
+    
+    y_cols_in_data <- names(data)[matching_cols]
+    
+    if (length(y_cols_in_data) > 0) {
+      warning(
+        sprintf(
+          "The outcome variable appears to be one of the data columns: %s.\n",
+          paste(y_cols_in_data, collapse = ", ")
+        ),
+        "Including the outcome in the formula (e.g., Tr ~ .) causes outcome leakage\n",
+        "and invalidates the propensity model.\n",
+        "Use a formula such as:  Tr ~ . - ", y_cols_in_data[1], "\n",
+        call. = FALSE
+      )
+    }
+  }
 
   # Apply NA action
-  if (anyNA(cbind(Z, Tr))) {
-    na_result <- na.action(data.frame(Z, Tr))
-
-    # Ensure Z remains a matrix
-    Z <- as.matrix(na_result[, -ncol(na_result), drop = FALSE])
+  if (!is.null(Y)) {
+    dat_all <- data.frame(Z, Tr = Tr, Y = Y)
+    na_result <- na.action(dat_all)
+    
+    Z  <- as.matrix(na_result[, seq_len(ncol(na_result) - 2), drop = FALSE])
+    Tr <- na_result[, ncol(na_result) - 1]
+    Y  <- na_result[, ncol(na_result)]
+  } else {
+    dat_all <- data.frame(Z, Tr = Tr)
+    na_result <- na.action(dat_all)
+    
+    Z  <- as.matrix(na_result[, -ncol(na_result), drop = FALSE])
     Tr <- na_result[, ncol(na_result)]
   }
 
   # Convert Tr to numeric
   Tr <- as.numeric(Tr)
+  
+  if (!is.null(Y)) {
+    if (all(Tr == 1)) {
+      stop("All units are treated (Tr = 1). Cannot compute ATE/ATT.")
+    }
+    if (all(Tr == 0)) {
+      stop("All units are control (Tr = 0). Cannot compute ATE/ATT.")
+    }
+  }
 
   # Calculate propensity scores for ck/h calculation
   message("Calculating propensity scores for ck/h calculation...")
@@ -420,21 +495,31 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   if (is.null(colnames(Z))) {
     colnames(Z) <- paste0("V", seq_len(ncol(Z)))  # Assign generic names V1, V2, V3, ...
   }
-
-  # Prepare data for Python
-  data_df <- as.data.frame(cbind(Tr, Z))
-  colnames(data_df)[1] <- "Tr"  # Ensure treatment column name is explicit
-
+  
+  if (is.null(Y)) {
+    data_df <- as.data.frame(cbind(Tr, Z))
+    colnames(data_df)[1] <- "Tr"
+    Y_column <- NULL
+    compute_variance <- FALSE
+  } else {
+    data_df <- as.data.frame(cbind(Tr, Z, Y))
+    colnames(data_df) <- c("Tr", colnames(Z), "Y")
+    Y_column <- "Y"
+    compute_variance <- TRUE
+  }
+  
   # Call Python function and capture results
   result <- mymodule$run_lbc_net(
     data_df = data_df,
     Z_columns = colnames(Z),
     T_column = "Tr",
+    Y_column = Y_column,
+    estimand = estimand,
     ck = ck,
     h = h,
     kernel = kernel,
     gpu = as.integer(gpu),
-    ate = as.integer(ATE),
+    ate = as.integer(ate_flag),
     seed = as.integer(seed),
     hidden_dim = as.integer(hidden_dim),
     L = as.integer(num_hidden_layers+1),
@@ -447,30 +532,25 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
     epsilon = epsilon,
     lsd_threshold = lsd_threshold,
     rolling_window = as.integer(rolling_window),
-    show_progress = show_progress
+    show_progress = show_progress,
+    compute_variance = compute_variance
   )
 
   # Extract individual components from returned dictionary
   propensity_scores <- result$propensity_scores
-  balance_loss <- result$balance_loss
-  calibration_loss <- result$calibration_loss
   total_loss <- result$total_loss
   lsd_max <- result$max_lsd
   lsd_mean <- result$mean_lsd
 
-  # Compute inverse probability weights (IPW)
+  # IPW weights (frequency weight ω*(p): 1 for ATE/Y, p for ATT)
   N <- length(propensity_scores)
-  w_star <- if (ATE == 1) rep(1, N) else propensity_scores
+  w_star <- if (ate_flag == 1L) rep(1, N) else propensity_scores
   ipw <- w_star / (Tr * propensity_scores + (1 - Tr) * (1 - propensity_scores))
 
   out <- list(
     fitted.values = propensity_scores,
     weights = ipw,
-    losses = list(
-      balance_loss = balance_loss,
-      calibration_loss = calibration_loss,
-      total_loss = total_loss
-    ),
+    loss = total_loss,
     lsd_train = list(
       lsd_max = lsd_max,
       lsd_mean = lsd_mean
@@ -489,7 +569,8 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
       rolling_window = rolling_window,
       max_epochs = max_epochs
     ),
-    ATE = ATE,
+    estimand   = estimand,
+    ate_flag   = ate_flag,
     seed = seed,
     call = match.call(),
     formula = formula,
@@ -502,6 +583,14 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
     K = K,
     ps_logistic = ps_log
   )
+  
+  # If Y was provided, store outcome + effect + variance
+  if (!is.null(Y)) {
+    out$Y <- Y
+    out$effect <- result$effect
+    out$se <- result$se
+    out$ci <- c(lower = result$ci_lower, upper = result$ci_upper)
+  }
 
   class(out) <- "lbc_net"  # Assign class to make it compatible with S3 methods
   return(out)

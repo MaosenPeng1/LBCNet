@@ -4,12 +4,12 @@ test_that("print.lbc_net correctly prints output", {
     formula = as.formula("Tr ~ X1 + X2"),
     Z = matrix(rnorm(100), nrow = 50, ncol = 2),
     Tr = sample(0:1, 50, replace = TRUE),
-    losses = list(total_loss = 0.0123),
+    loss = 0.0123,
     lsd_train = list(lsd_max = 3.45, lsd_mean = 1.23),
     parameters = list(hidden_dim = 50, num_hidden_layers = 2, vae_lr = 0.01, lr = 0.05, weight_decay = 1e-5, balance_lambda = 1.0),
     stopping_criteria = list(lsd_threshold = 2, rolling_window = 5, max_epochs = 1000),
     kernel = "gaussian",
-    ATE = 1
+    ate_flag = 1
   )
   class(mock_lbc_net) <- "lbc_net"
 
@@ -37,7 +37,7 @@ test_that("print.lsd correctly prints output", {
     LSD_mean = 1.23,
     LSD_max = 3.45,
     kernel = "gaussian",
-    ATE = 1
+    ate_flag = 1
   )
   class(mock_lsd) <- "lsd"
 

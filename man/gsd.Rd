@@ -4,7 +4,15 @@
 \alias{gsd}
 \title{Compute Global Standardized Mean Difference (GSD)}
 \usage{
-gsd(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 1, ...)
+gsd(
+  object = NULL,
+  Z = NULL,
+  Tr = NULL,
+  ps = NULL,
+  wt = NULL,
+  ate_flag = 1,
+  ...
+)
 }
 \arguments{
 \item{object}{An optional object of class `"lbc_net"`, from which `Z`, `Tr`, and `weights` are extracted.}
@@ -21,7 +29,7 @@ if \code{ATE = 0}, then \eqn{w^*(ps) = ps}. Ignored if \code{wt} is provided.}
 
 \item{wt}{A numeric vector of inverse probability weights (IPW) or other balancing weights. If provided, `ps` is ignored.}
 
-\item{ATE}{An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
+\item{ate_flag}{An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
 Average Treatment Effect (ATE) by weighting all observations equally. Setting it to 0 estimates the
 Average Treatment Effect on the Treated (ATT), where only treated units are fully weighted while control
 units are downweighted based on their propensity scores. Ignored if \code{wt} is provided.

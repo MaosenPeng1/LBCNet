@@ -96,86 +96,118 @@ est_effect <- function(object, Y, ...) {
 #' }
 #' @export
 est_effect.lbc_net <- function(object = NULL, Y, Tr = NULL, wt = NULL, type = "ATE", ...) {
-
-  # Extract Z, wt, and type from lbc_net object if provided
+  
+  ## 1. Extract from lbc_net object if provided
   if (!is.null(object)) {
     if (!inherits(object, "lbc_net")) {
       stop("Error: `object` must be an object of class 'lbc_net'.")
     }
-    Tr <- getLBC(object, "Tr")   # Extract treatment assignment
-    wt <- getLBC(object, "weights")  # Extract inverse probability weights
-
-    # Extract type only if user has not manually set it to "Y"
+    
+    Tr <- getLBC(object, "Tr")        # Extract treatment assignment
+    wt <- getLBC(object, "weights")   # Extract inverse probability weights
+    
+    # If user did NOT explicitly request type = "Y",
+    # infer ATE/ATT from the object.
     if (missing(type) || type != "Y") {
-      type <- ifelse(getLBC(object, "ATE") == 1, "ATE", "ATT")
+      type <- ifelse(getLBC(object, "ate_flag") == 1, "ATE", "ATT")
     }
   }
-
-  # Ensure required inputs are provided
+  
+  ## 2. Validate type (to match test expectations)
+  valid_types <- c("Y", "ATE", "ATT")
+  if (is.null(type) || length(type) != 1L || !type %in% valid_types) {
+    stop("Error: `type` must be one of 'Y', 'ATE', or 'ATT'.")
+  }
+  
+  ## 3. Ensure required inputs are provided
   if (is.null(Tr) || is.null(wt)) {
     stop("Error: Must provide `Tr` and `wt` manually if `object` is NULL.")
   }
-
-  # Ensure valid data types
+  
+  ## 4. Basic type/length checks
   if (!is.numeric(Y) || !is.numeric(wt) || !is.numeric(Tr)) {
     stop("Error: All inputs (Y, wt, Tr) must be numeric vectors.")
   }
   if (length(Y) != length(wt) || length(Y) != length(Tr)) {
     stop("Error: Y, wt, and Tr must have the same length.")
   }
-
-  # Handle case where there is only treatment or only control
-  if (all(Tr == 1)) {
-    warning("All units are treated (Tr = 1). Cannot compute ATE or ATT.")
-    return(NaN)
-  }
-
-  if (all(Tr == 0)) {
-    warning("All units are control (Tr = 0). Cannot compute ATE or ATT.")
-    return(NaN)
-  }
-
-  # Compute estimates based on type
+  
+  Y  <- as.numeric(Y)
+  Tr <- as.numeric(Tr)
+  wt <- as.numeric(wt)
+  
+  ## Helper: weighted mean
+  wmean <- function(x, w) sum(w * x) / sum(w)
+  
+  ## 5. Type = "Y": overall weighted mean, ignoring Tr
+  ##    (so it stays finite even if all Tr==0 or all Tr==1)
   if (type == "Y") {
-    # Weighted mean outcome for the treated group (Tr = 1)
-    denom <- sum(Tr * wt)
-    if (denom == 0) {
-      warning("Sum of weighted treatment group is zero. Returning NaN.")
+    denom <- sum(wt)
+    if (denom == 0 || !is.finite(denom)) {
+      warning("Sum of weights is zero or non-finite. Returning NaN.")
       return(NaN)
     }
-    return(sum(Tr * wt * Y) / denom)
+    return(sum(wt * Y) / denom)
   }
-
+  
+  ## 6. Prepare group masks for ATE/ATT
+  treated  <- (Tr == 1)
+  control  <- (Tr == 0)
+  
+  ## 7. Type = "ATE"
   if (type == "ATE") {
-    # ATE: Difference between weighted means of treated & control
-    ATE_treated <- sum(Tr * wt * Y) / sum(Tr * wt)
-    ATE_control_denom <- sum((1 - Tr) * wt)
-
-    if (ATE_control_denom == 0) {
-      warning("Control group sum is zero. Cannot compute ATE.")
+    
+    # Edge cases: all treated or all control
+    if (all(treated)) {
+      warning("All units are treated (Tr = 1). Cannot compute ATE.")
       return(NaN)
     }
-
-    ATE_control <- sum((1 - Tr) * wt * Y) / ATE_control_denom
-    return(ATE_treated - ATE_control)
+    if (all(control)) {
+      warning("All units are control (Tr = 0). Cannot compute ATE.")
+      return(NaN)
+    }
+    
+    denom_t <- sum(wt[treated])
+    denom_c <- sum(wt[control])
+    
+    if (denom_t == 0 || denom_c == 0) {
+      warning("Treated or control group has zero total weight. Cannot compute ATE.")
+      return(NaN)
+    }
+    
+    mu1 <- sum(wt[treated]  * Y[treated])  / denom_t
+    mu0 <- sum(wt[control]  * Y[control])  / denom_c
+    
+    return(mu1 - mu0)
   }
-
+  
+  ## 8. Type = "ATT"
   if (type == "ATT") {
-    # ATT: Treatment effect among the treated group
-    ATT_treated_denom <- sum(Tr)
-    ATT_control_denom <- sum((1 - Tr) * wt)
-
-    if (ATT_control_denom == 0) {
-      warning("Control group sum is zero. Cannot compute ATT.")
+    # ATT is among the treated; still need both groups to define contrast
+    
+    if (all(!treated)) {
+      warning("No treated units (Tr = 1). Cannot compute ATT.")
       return(NaN)
     }
-
-    ATT_treated <- sum(Tr * Y) / ATT_treated_denom  # Mean outcome for treated
-    ATT_control <- sum((1 - Tr) * wt * Y) / ATT_control_denom  # Weighted mean for controls
-
-    return(ATT_treated - ATT_control)
+    if (all(!control)) {
+      warning("No control units (Tr = 0). Cannot compute ATT.")
+      return(NaN)
+    }
+    
+    denom_t <- sum(treated)          # unweighted mean among treated (your original choice)
+    denom_c <- sum(wt[control])      # weighted mean among controls
+    
+    if (denom_t == 0 || denom_c == 0) {
+      warning("Treated or control group has zero count/weight. Cannot compute ATT.")
+      return(NaN)
+    }
+    
+    mu1_treated <- sum(Y[treated])            / denom_t
+    mu0_treated <- sum(wt[control] * Y[control]) / denom_c
+    
+    return(mu1_treated - mu0_treated)
   }
-
+  
+  ## 9. Fallback (should be unreachable due to earlier type check)
   stop("Error: `type` must be one of 'Y', 'ATE', or 'ATT'.")
 }
-

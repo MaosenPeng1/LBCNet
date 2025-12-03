@@ -301,120 +301,68 @@ def omega_calculate(propensity_scores, ck, h, kernel_id=0):
     # Apply bandwidth scaling (to adjust for different h values)
     return omega / h
 
-
-def local_balance_ipw_loss(propensity_scores, treatment, Z, ck, h, w, ate=1):
+def lbc_net_loss(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, balance_lambda =1.0):
     """
-    Computes the local balance Inverse Probability Weighting (IPW) loss (Q1).
+    Unified LBC-Net loss combining local balance and calibration moments.
 
-    This function calculates the imbalance of covariates across treatment groups
-    using kernel-based weighting and inverse probability weighting.
-
-    Parameters:
+    Parameters
     ----------
-    propensity_scores : torch.Tensor
-        Estimated propensity scores, shape: [N].
-    treatment : torch.Tensor
-        Binary treatment assignments (0 or 1), shape: [N].
-    Z : torch.Tensor
-        Covariate matrix, shape: [N, p].
-    ck : torch.Tensor
-        Kernel centers, shape: [K].
-    h : torch.Tensor
-        Kernel bandwidths, shape: [K].
-    w : torch.Tensor    
-        Kernel weights, shape: [N, K].
-    ipw : torch.Tensor
-        Inverse Probability Weights (IPW), shape: [N].
+    propensity_scores : torch.Tensor, shape [N]
+        Estimated propensity scores.
+    treatment : torch.Tensor, shape [N]
+        Binary treatment indicator (0/1).
+    Z : torch.Tensor, shape [N, p]
+        Covariate matrix (often Z_norm with intercept).
+    ck : torch.Tensor, shape [K]
+        Kernel centers.
+    h : torch.Tensor, shape [K]
+        Bandwidths.
+    ate : int, default=1
+        1 for ATE target, 0 for ATT target.
+    kernel_id : int, default=0
+        0 = Gaussian, 1 = Uniform, 2 = Epanechnikov.
 
-    Returns:
+    Returns
     -------
-    torch.Tensor
-        The computed local balance IPW loss (scalar).
+    torch.Tensor (scalar)
+        The loss Q = E_k [ ||(B_k, C_k)||^2 ].
     """
+    tiny = 1e-6
 
-    K = len(ck)  # Number of kernels
+    # Kernel weights: shape [N, K]
+    kernel_w = omega_calculate(propensity_scores, ck, h, kernel_id)
+    kernel_w = torch.where(
+        (torch.abs(kernel_w) < tiny) & (kernel_w != 0),
+        torch.full_like(kernel_w, tiny),
+        kernel_w
+    )
 
-    # Compute IPW with ATT adjustment
-    w_star = torch.ones_like(propensity_scores) if ate == 1 else propensity_scores # w*(p) = 1 (ATE) or w*(p) = p (ATT)
+    K = len(ck)          # number of kernels
+    N, p = Z.shape       # N samples, p covariates
 
-    ipw = treatment * propensity_scores + (1 - treatment) * (1 - propensity_scores) 
-    W = (w * w_star.unsqueeze(1)) / ipw.unsqueeze(1)  # Expand for broadcasting (Shape: [N, K])
+    # w*(p) = 1 (ATE) or w*(p) = p (ATT)
+    w_star = torch.ones_like(propensity_scores) if ate == 1 else propensity_scores
+    # Shape [N, K]
+    w = kernel_w * w_star.unsqueeze(1)
 
-    # Compute `q` (covariate imbalance estimation) (Shape: [K, N, p])
-    treatment_factor = (2 * treatment - 1).unsqueeze(1)  # Shape: [N, 1] -> Maps treatment: 1 → 1, 0 → -1
-    q = treatment_factor * W  # Shape: [N, K]
-    q = q.unsqueeze(2) * Z.unsqueeze(1)  # Shape: [N, K, p]
-    q = q.permute(1, 0, 2)  # Reorder to [K, N, p]
-    qvecT = torch.sum(q, dim=1)  # Sum over N → Shape: [K, p]
+    # d = P(A=a | X) under the “observed” treatment
+    d = treatment * propensity_scores + (1 - treatment) * (1 - propensity_scores)
 
-    # Compute Sigma matrices for all kernels
-    temp0 = ((w**2) * (w_star.unsqueeze(1)**2)).unsqueeze(2) * Z.unsqueeze(1)  # Shape: [N, K, p]
-    temp0 = temp0.permute(1, 0, 2)  # Shape: [K, N, p]
-    Z_t = Z.transpose(0, 1).unsqueeze(0).expand(K, -1, -1)  # Shape: [K, p, N]
-    temp1 = torch.bmm(Z_t, temp0)  # Batched matrix multiplication (Shape: [K, p, p])
-    sigma = temp1 / (ck * (1 - ck)).view(K, 1, 1)  # Shape: [K, p, p]
+    # Balance moment: B_k = sum_i w_ik * ((2A_i - 1)/d_i) * Z_i
+    V = ((2 * treatment - 1) / d).unsqueeze(1) * Z          # [N, p]
+    B = w.transpose(0, 1) @ V                               # [K, p]
 
-    # Compute pseudo-inverse of Sigma (Shape: [K, p, p])
-    sigma_inv = torch.linalg.pinv(sigma)
+    # Calibration moment: C_k = sum_i w_ik * (A_i - p_i) / {ck_k (1 - ck_k)}
+    C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (ck * (1 - ck))  # [K]
 
-    # Compute loss for each kernel
-    A = torch.bmm(qvecT.unsqueeze(1), sigma_inv)  # Shape: [K, 1, p]
-    loss_per_kernel = torch.bmm(A, qvecT.unsqueeze(2))  # Shape: [K, 1, 1]
+    # Stack [B_k, C_k] into D_k ∈ R^{p+1}
+    C_scaled = balance_lambda * C
+    D = torch.cat([B, C_scaled.unsqueeze(1)], dim=1) # [K, p+1]
 
-    # Aggregate loss across valid kernels
-    valid_kernels = torch.sum(w, dim=0) > 0  # Identify valid kernels
-    K_new = torch.sum(valid_kernels).item()  # Count valid kernels
-    loss = torch.sum(loss_per_kernel[valid_kernels]) / K_new  # Normalize loss
+    # Q = mean_k ||D_k||^2
+    Q = (D * D).sum(dim=1).mean()
 
-    return loss
-
-def penalty_loss(propensity_scores, treatment, ck, h, w):
-    """
-    Computes the penalty loss term (Q2) for propensity score estimation.
-
-    This function calculates the local penalty for imbalance using kernel-weighted 
-    squared differences between the treatment assignment and estimated propensity scores.
-
-    Parameters:
-    ----------
-    propensity_scores : torch.Tensor
-        Estimated propensity scores, shape: [N].
-    treatment : torch.Tensor
-        Binary treatment assignments (0 or 1), shape: [N].
-    ck : torch.Tensor
-        Kernel centers, shape: [K].
-    h : torch.Tensor
-        Kernel bandwidths, shape: [K].
-    w : torch.Tensor
-        Kernel weights, shape: [N, K].
-
-    Returns:
-    -------
-    torch.Tensor
-        The calculated penalty loss term (scalar).
-    """
-
-    # Compute numerator: Weighted squared differences (Shape: [K])
-    diff_squared = (treatment - propensity_scores) ** 2  # Shape: [N]
-    numerator = torch.sum(w * diff_squared.unsqueeze(1), dim=0)  # Shape: [K]
-
-    # Compute denominator: Weighted sum scaled by ck(1 - ck) (Shape: [K])
-    sum_w = torch.sum(w, dim=0)  # Shape: [K]
-    denominator = torch.where(
-        sum_w == 0,
-        torch.tensor(1.0, dtype=torch.float32),  # Avoid division by zero
-        ck * (1 - ck) * sum_w
-    )  # Shape: [K]
-
-    # Compute kernel-wise loss (Shape: [K])
-    kernel_loss = numerator / denominator
-
-    # Compute final loss by averaging over valid kernels (where sum_w > 0)
-    valid_kernels = sum_w > 0  # Boolean mask for valid kernels
-    loss = torch.sum(kernel_loss[valid_kernels]) / torch.sum(valid_kernels)
-
-    return loss
-
+    return Q
 
 def lsd_cal(propensity_scores, treatment, Z, ck, h, kernel_id, ate=1):
     """
@@ -487,3 +435,855 @@ def lsd_cal(propensity_scores, treatment, Z, ck, h, kernel_id, ate=1):
     LSD_max = torch.max(torch.abs(LSD))    # Maximum absolute LSD
 
     return LSD_max, LSD_mean
+
+def ipw_est(Y, T, ps, estimand="ATE"):
+    """
+    Compute IPW estimands: ATE, ATT, or Y (weighted treated mean).
+
+    Parameters
+    ----------
+    Y : torch.Tensor, shape (n,)
+        Outcome vector.
+    T : torch.Tensor, shape (n,)
+        Treatment assignment (0/1).
+    ps : torch.Tensor, shape (n,)
+        Propensity scores estimated by LBC-Net.
+    estimand : {"ATE","ATT","Y"}
+        Target causal estimand.
+
+    Returns
+    -------
+    tau : torch.Tensor (scalar)
+        Estimated causal estimand.
+    """
+
+    estimand = estimand.upper()
+    Y = Y.double()
+    T = T.double()
+    ps = ps.double()
+
+    # denominator: d_i = T*p + (1-T)*(1-p)
+    d = T * ps + (1 - T) * (1 - ps)
+
+    # --------- ATE ---------
+    if estimand == "ATE":
+        # frequency weight: w* = 1
+        w_star = torch.ones_like(ps)
+        wt = w_star / d
+
+        # treated mean
+        num_treat = torch.sum(T * wt * Y)
+        den_treat = torch.sum(T * wt)
+
+        # control mean
+        num_ctrl = torch.sum((1 - T) * wt * Y)
+        den_ctrl = torch.sum((1 - T) * wt)
+
+        if den_ctrl.item() == 0:
+            return torch.tensor(float('nan'), device=Y.device)
+
+        tau = (num_treat / den_treat) - (num_ctrl / den_ctrl)
+        return tau
+
+    # --------- ATT ---------
+    elif estimand == "ATT":
+        # treated mean (unweighted)
+        num_treat = torch.sum(T * Y)
+        den_treat = torch.sum(T)
+
+        # ATT frequency weight: w* = p
+        w_star = ps
+        wt = w_star / d
+
+        # reweighted control mean
+        num_ctrl = torch.sum((1 - T) * wt * Y)
+        den_ctrl = torch.sum((1 - T) * wt)
+
+        if den_ctrl.item() == 0:
+            return torch.tensor(float('nan'), device=Y.device)
+
+        tau = (num_treat / den_treat) - (num_ctrl / den_ctrl)
+        return tau
+
+    # --------- Y (weighted mean among treated) ---------
+    elif estimand == "Y":
+        # frequency weight: w* = 1
+        wt = 1.0 / d
+
+        num = torch.sum(T * wt * Y)
+        den = torch.sum(T * wt)
+
+        if den.item() == 0:
+            return torch.tensor(float('nan'), device=Y.device)
+
+        muY = num / den
+        return muY
+
+    else:
+        raise ValueError(f"Unknown estimand '{estimand}'. Use 'ATE', 'ATT', or 'Y'.")
+
+
+def plug_in_if(Y, T, p, estimand="ATE"):
+    """
+    Plug-in IPW influence function treating p as known (no PS uncertainty).
+
+    Supports three estimands:
+      - ATE: μ1 - μ0 using Hájek IPW with weights T/p and (1-T)/(1-p)
+      - ATT: E[Y | T=1] - μ0,ATT where μ0,ATT is a Hájek reweighted
+             control mean with weights proportional to p/(1-p)
+      - Y  : weighted mean outcome among treated using IPW weights
+             based on the fitted propensity scores.
+
+    Parameters
+    ----------
+    Y : torch.Tensor, shape (n,)
+        Outcome vector.
+    T : torch.Tensor, shape (n,)
+        Treatment indicator (0/1).
+    p : torch.Tensor, shape (n,)
+        Propensity scores, treated as fixed (plug-in).
+    estimand : {"ATE", "ATT", "Y"}, default "ATE"
+        Target estimand.
+
+    Returns
+    -------
+    phi : torch.Tensor, shape (n,)
+        Per-observation plug-in influence function values.
+    """
+    Y = Y.double()
+    T = T.double()
+    p = p.double()
+    n = Y.numel()
+    est = estimand.upper()
+
+    # -------- ATE: standard Hájek IPW μ1 - μ0 --------
+    if est == "ATE":
+        # Treated: a1 = T/p, b1 = T*Y/p
+        a1 = T / p
+        b1 = T * Y / p
+        A1 = a1.sum()
+        B1 = b1.sum()
+        mu1 = B1 / A1
+
+        # Control: a0 = (1-T)/(1-p), b0 = (1-T)*Y/(1-p)
+        a0 = (1.0 - T) / (1.0 - p)
+        b0 = (1.0 - T) * Y / (1.0 - p)
+        A0 = a0.sum()
+        B0 = b0.sum()
+        mu0 = B0 / A0
+
+        # Plug-in IFs
+        denom1 = A1 / n  # ~ E[a1]
+        denom0 = A0 / n  # ~ E[a0]
+        phi1 = (b1 - mu1 * a1) / denom1
+        phi0 = (b0 - mu0 * a0) / denom0
+
+        phi = phi1 - phi0
+
+    # -------- ATT: mean treated - reweighted control mean --------
+    elif est == "ATT":
+        # Treated mean μ1 = E[Y | T=1]
+        a1 = T               # weights for treated
+        b1 = T * Y
+        A1 = a1.sum()
+        B1 = b1.sum()
+        mu1 = B1 / A1
+
+        # Control mean μ0,ATT with weights proportional to p/(1-p)
+        # a0 = (1-T) * p/(1-p), b0 = a0 * Y
+        a0 = (1.0 - T) * p / (1.0 - p)
+        b0 = a0 * Y
+        A0 = a0.sum()
+        B0 = b0.sum()
+        mu0 = B0 / A0
+
+        denom1 = A1 / n
+        denom0 = A0 / n
+        phi1 = (b1 - mu1 * a1) / denom1
+        phi0 = (b0 - mu0 * a0) / denom0
+
+        phi = phi1 - phi0
+
+    # -------- Y: weighted treated mean (IPW Hájek ratio) --------
+    elif est == "Y":
+        # Here we mimic a generic Hájek ratio m = B/A:
+        #   a_i = T_i * w_i
+        #   b_i = T_i * w_i * Y_i
+        # with IPW weights w_i based on p.
+        #
+        # Use stabilized weights with frequency weight w* = 1:
+        #   d_i = T_i p_i + (1-T_i)(1-p_i)
+        #   w_i = 1 / d_i
+        d = T * p + (1.0 - T) * (1.0 - p)
+        w = 1.0 / d
+
+        a = T * w
+        b = T * w * Y
+        A = a.sum()
+        B = b.sum()
+        muY = B / A
+
+        denom = A / n
+        phi = (b - muY * a) / denom
+
+    else:
+        raise ValueError(f"Unknown estimand '{estimand}'. use 'ATE', 'ATT', or 'Y'.")
+
+    return phi
+
+def lbc_net_moments(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, balance_lambda =1.0):
+    """
+    Compute the per-observation influence-function contributions of the
+    LBC-Net moment conditions (local balance + calibration).
+
+    This function produces φ_i(θ) = ∂Q/∂p_i for each observation,
+    where Q is the unified LBC-Net loss:
+
+        Q = E_k[ ||B_k||^2 + C_k^2 ]
+
+    with:
+      - B_k = local balance moment at kernel center c_k
+      - C_k = calibration moment at c_k
+
+    These per-observation gradients are needed to construct:
+      - the plug-in term for influence functions,
+      - the Jacobian-vector products required by if_var(),
+      - the Hessian–vector implicit products.
+
+    Parameters
+    ----------
+    propensity_scores : torch.Tensor, shape (N,)
+        Estimated propensities p_i from the trained LBC-Net.
+    treatment : torch.Tensor, shape (N,)
+        Treatment assignment T_i ∈ {0,1}.
+    Z : torch.Tensor, shape (N, p)
+        Covariate matrix, typically Z_norm (with intercept).
+    ck : torch.Tensor, shape (K,)
+        Kernel center grid c_k ∈ (0,1).
+    h : torch.Tensor, shape (K,)
+        Bandwidths h_k for kernel smoothing.
+    ate : {0,1}, default 1
+        1 for ATE target, 0 for ATT target (affects moments).
+    kernel_id : {0,1,2}, default 0
+        Kernel type:
+           0 = Gaussian
+           1 = Uniform
+           2 = Epanechnikov
+    balance_lambda : float, default 1.0
+        Scaling factor for calibration moments in the loss.
+
+    Returns
+    -------
+    phi_i : torch.Tensor, shape (N, K*(p+1))
+        For each observation i, concatenates:
+          - local balance components for each kernel center (K*p entries)
+          - local calibration components for each center (K entries)
+        i.e., total K*(p+1) moment contributions.
+    """
+    tiny = 1e-6
+
+    # Kernel weights ω(c_k, p_i)
+    kernel_w = omega_calculate(propensity_scores, ck, h, kernel_id)
+    kernel_w = torch.where(
+        (torch.abs(kernel_w) < tiny) & (kernel_w != 0),
+        torch.full_like(kernel_w, tiny),
+        kernel_w,
+    )
+
+    N, p = Z.shape
+    K = len(ck)
+
+    # w*(p) = 1 (ATE) or w*(p) = p (ATT)
+    w_star = torch.ones_like(propensity_scores) if ate == 1 else propensity_scores
+    # Shape [N, K]
+    w = kernel_w * w_star.unsqueeze(1)
+
+    # d_i = T_i p_i + (1-T_i)(1-p_i)
+    d = treatment * propensity_scores + (1 - treatment) * (1 - propensity_scores)
+
+    # Local balance score:
+    #   V_i = ((2T_i - 1)/d_i) Z_i
+    V = ((2 * treatment - 1) / d).unsqueeze(1) * Z         # [N, p]
+
+    # φ_B (local balance contributions), shape [N,K,p]
+    phiB = w.unsqueeze(2) * V.unsqueeze(1)
+
+    # φ_C (local calibration contributions), shape [N,K]
+    phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / (ck * (1 - ck))
+    phiC_scaled = balance_lambda * phiC
+
+    # Flatten: concatenate (K*p) + K = K*(p+1) components
+    phi_i = torch.cat([phiB.reshape(N, K * p), phiC_scaled], dim=1)
+
+    return phi_i
+
+def _flatten_grads(grads):
+    """
+    Flatten a list of parameter gradients into a single 1D vector.
+
+    Parameters
+    ----------
+    grads : list of torch.Tensor
+        Each entry corresponds to ∂L/∂θ_j for one network parameter tensor.
+
+    Returns
+    -------
+    flat : torch.Tensor, shape (total_params,)
+        Concatenation of all gradients reshaped to 1D.
+    """
+    return torch.cat([g.reshape(-1) for g in grads])
+
+def if_var(
+    model,          # propensity NN, outputs p in (0,1)
+    T,              # [N] {0,1}
+    Y,              # [N] outcome for Δ
+    Z,              # [N, p] covariates used in moments (can include intercept)
+    ck, h,          # [K], [K] kernel params
+    phi_ipw,        # [N] plug-in IPW IF for chosen estimand
+    ate=1, 
+    estimand="ATE", # {"ATE","ATT","Y"} – affects moments and Δ
+    kernel_id=0,    # pass-through for omega_calculate
+    balance_lambda=1.0,
+):
+    """
+    Influence-function-based SE for an IPW estimand with LBC-Net PS.
+
+    This function computes the chain-rule correction term for the EIF of a
+    target estimand (ATE / ATT / Y), accounting for the fact that the
+    propensity scores p(·; θ) are estimated by the LBC-Net neural network.
+
+    Conceptually, it builds:
+        - ψ_i(θ): stacked LBC-Net moment conditions (local balance + calibration)
+        - M  = ∂ m̄(θ)/∂θ, where m̄(θ) = E_n[ψ_i(θ)]
+        - g  = ∂ Δ(θ)/∂θ, where Δ is the IPW estimand
+        - chain term per obs:  -ψ_i M (M^T M)^{-1} g
+
+    Then it combines this chain term with the plug-in IF φ_ipw (treating p fixed)
+    to obtain the total influence function:
+        φ_i = φ_ipw,i + chain_i
+
+    Finally, it returns an SE based on Var(φ_i)/n.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Trained LBC-Net model mapping Z -> propensity p in (0,1).
+    T : torch.Tensor, shape (N,)
+        Treatment assignment (0/1).
+    Y : torch.Tensor, shape (N,)
+        Outcome used in the estimand Δ.
+    Z : torch.Tensor, shape (N, p)
+        Covariate matrix (often Z_norm, with intercept).
+    ck : torch.Tensor, shape (K,)
+        Kernel centers.
+    h : torch.Tensor, shape (K,)
+        Kernel bandwidths.
+    phi_ipw : torch.Tensor, shape (N,)
+        Plug-in IF for the chosen estimand, treating p as fixed
+        (from plug_in_if(..., estimand=...)).
+    ate : {0,1}, default 1
+        1 for ATE target, 0 for ATT target (affects moments).
+    estimand : {"ATE","ATT","Y"}, default "ATE"
+        Target estimand for the EIF.
+    kernel_id : {0,1,2}, default 0
+        Kernel type: 0=Gaussian, 1=Uniform, 2=Epanechnikov.
+
+    Returns
+    -------
+    se : torch.Tensor (scalar)
+        Estimated standard error of the IPW estimand.
+    """
+
+    estimand = str(estimand).upper()
+
+    # --- forward pass for propensity, no graph needed here ---
+    p = model(Z).squeeze()           # [N], already sigmoid+clipped in your net
+    params = tuple(model.parameters())
+
+    # --- build per-observation stacked moments ψ_i and sample mean m̄ ---
+    # First: ψ_i using detached p, just to get numeric values and scaling.
+    psi_i = lbc_net_moments(
+        propensity_scores=p.detach(),
+        treatment=T,
+        Z=Z,
+        ck=ck,
+        h=h,
+        ate=ate,
+        kernel_id=kernel_id,
+        balance_lambda=balance_lambda
+    )                                # [N, q]
+    N, q = psi_i.shape
+
+    # Now, rebuild ψ_i with graph-enabled p(θ) so that we can differentiate.
+    p_graph = model(Z).squeeze()     # [N], graph-enabled
+    psi_i_graph = lbc_net_moments(
+        propensity_scores=p_graph,
+        treatment=T,
+        Z=Z,
+        ck=ck,
+        h=h,
+        ate=ate,
+        kernel_id=kernel_id,
+        balance_lambda=balance_lambda
+    )                                # [N, q] with graph
+    mbar_graph = psi_i_graph.mean(0) # [q]
+
+    # --- exact Jacobian M = ∂m̄/∂θ, stacked row by row ---
+    rows = []
+    for j in range(q):
+        grads_j = torch.autograd.grad(
+            outputs=mbar_graph[j],
+            inputs=params,
+            retain_graph=True,
+            allow_unused=False,
+        )
+        rows.append(_flatten_grads(grads_j))
+    M = torch.stack(rows, dim=0)     # [q, dθ]
+
+    # --- Stabilize by scaling columns of ψ and corresponding rows of M ---
+    with torch.no_grad():
+        col_scale = psi_i.std(dim=0) + 1e-8  # [q]
+
+    psi_s = psi_i / col_scale                # [N, q]
+    M_s   = M / col_scale.unsqueeze(1)       # [q, dθ]
+
+    # --- exact gradient g = ∂Δ/∂θ for chosen estimand ---
+    Delta = ipw_est(Y, T, p_graph, estimand=estimand)  # scalar
+    g_params = torch.autograd.grad(
+        outputs=Delta,
+        inputs=params,
+        retain_graph=False,
+        allow_unused=False,
+    )
+    gvec = _flatten_grads(g_params)          # [dθ]
+
+    # --- chain correction: -ψ_i M (M^T M)^{-1} g using SVD-based ridge ---
+    U, S, Vh = torch.linalg.svd(M_s, full_matrices=False)  # M_s = U Σ V^T
+    tau = 1e-3 * S.max()                                   # spectral floor
+    mask = (S >= tau)
+    S_kept = S[mask]
+    V_kept = Vh[mask].T
+    g_proj = (Vh @ gvec)[mask]
+
+    lambda_adaptive = 0.01 * (S_kept**2).mean()
+
+    # Ridge in singular space: b = V ( (V^T g) / (Σ^2 + λ) )
+    b = V_kept @ (g_proj / (S_kept**2 + lambda_adaptive))  # [dθ]
+
+    # S_i = ψ_i M (M^T M + λ I)^{-1} g  (implemented via scaled version)
+    S_chain = psi_s @ M_s @ b                              # [N]
+    chain_per_obs = -S_chain                               # [N]
+
+    # --- total IF, variance, and SE ---
+    phi = chain_per_obs + phi_ipw                          # [N]
+    phi_centered = phi - phi.mean()
+    var = (phi_centered.pow(2).sum() / (N - 1)) / N        # Var(φ)/n
+    se = torch.sqrt(var)                                   # scalar tensor
+
+    return se
+
+def ipw_surv_na(time, delta, Tr, ps, t_grid):
+    """
+    IPW Nelson–Aalen survival estimator and survival difference on a time grid.
+
+    This computes IPW-weighted Nelson–Aalen cumulative hazards separately for
+    A = 1 and A = 0, then transforms to survival curves S1(t), S0(t) and their
+    difference Δ(t) = S1(t) - S0(t) at each t in t_grid.
+
+    Parameters
+    ----------
+    time : torch.Tensor, shape [n]
+        Event or censoring times.
+    delta : torch.Tensor, shape [n]
+        Event indicator (1 = event, 0 = censored).
+    Tr : torch.Tensor, shape [n]
+        Treatment indicator (0/1).
+    ps : torch.Tensor, shape [n]
+        Estimated propensity scores ê(X). MUST keep grad for autograd.
+    t_grid : torch.Tensor or array-like, shape [G] or scalar
+        Time points at which to evaluate S1, S0, and Δ.
+        Assumed (and recommended) to be sorted in ascending order.
+
+    Returns
+    -------
+    S1_hat : torch.Tensor, shape [G]
+        Estimated survival function under treatment at each t in t_grid.
+    S0_hat : torch.Tensor, shape [G]
+        Estimated survival function under control at each t in t_grid.
+    diff_hat : torch.Tensor, shape [G]
+        Estimated survival difference S1_hat - S0_hat at each t in t_grid.
+
+    Notes
+    -----
+    - Returns TENSORS so that autograd can propagate gradients through ps.
+    - If there are no events at or before max(t_grid), we return S1 = S0 = 1
+      (vector of ones) and diff = 0 (vector of zeros).
+    """
+
+    # Keep computation graph for ps; just align dtypes/devices
+    dtype = ps.dtype
+    device = ps.device
+
+    time  = time.to(device=device, dtype=dtype)
+    delta = delta.to(device=device, dtype=dtype)
+    Tr    = Tr.to(device=device, dtype=dtype)
+    # ps already on correct device/dtype with grad
+
+    # t_grid: convert to 1D tensor on same device
+    if not torch.is_tensor(t_grid):
+        t_grid = torch.tensor(t_grid, dtype=dtype, device=device)
+    t_grid = t_grid.to(device=device, dtype=dtype).view(-1)  # [G]
+    G = t_grid.shape[0]
+
+    # Weights for treated and control arms
+    # (ω*(p) = 1; any ate flag is ignored here for now)
+    w1 = Tr / ps                  # A = 1
+    w0 = (1.0 - Tr) / (1.0 - ps)  # A = 0
+
+    # Distinct event times (any arm) up to max(t_grid)
+    t_max = torch.max(t_grid)
+    mask_event = (delta == 1.0) & (time <= t_max)
+    event_times = torch.unique(time[mask_event])
+    event_times, _ = torch.sort(event_times)
+
+    # If no events ≤ max(t_grid), survival ≈ 1 at all grid times
+    if event_times.numel() == 0:
+        S1_hat = torch.ones(G, dtype=dtype, device=device)
+        S0_hat = torch.ones(G, dtype=dtype, device=device)
+        diff_hat = S1_hat - S0_hat  # zeros
+        return S1_hat, S0_hat, diff_hat
+
+    # Build at-risk and jump indicators over event time grid
+    # event_times: [J], time: [n]
+    t_mat = event_times.unsqueeze(0)       # [1, J]
+    time_mat = time.unsqueeze(1)           # [n, 1]
+
+    Y  = (time_mat >= t_mat).to(dtype)     # [n, J], at risk
+    dN = ((time_mat == t_mat) &
+          (delta.unsqueeze(1) == 1.0)).to(dtype)  # [n, J], event at t_j
+
+    def arm_surv(w_a):
+        """
+        Compute survival S_a(t) on t_grid for one arm a using IPW Nelson–Aalen.
+        """
+        WA = w_a.unsqueeze(1)   # [n, 1]
+
+        num = (WA * dN).sum(dim=0)         # [J]
+        den = (WA * Y).sum(dim=0)         # [J]
+        den = den.clamp_min(1e-10)
+        dLambda_hat = num / den           # [J]
+
+        # Cumulative hazard at each event time: Λ(t_j) = sum_{k ≤ j} dΛ_k
+        # We don't actually need Λ at each event; we can integrate via masks
+        # for each t_grid: Λ(t) = sum_{j: t_j ≤ t} dΛ_j
+        # t_grid: [G], event_times: [J]
+        mask_t = (t_grid.unsqueeze(1) >= event_times.unsqueeze(0)).to(dtype)  # [G, J]
+        Lambda_grid = (mask_t * dLambda_hat.unsqueeze(0)).sum(dim=1)          # [G]
+
+        S_hat = torch.exp(-Lambda_grid)    # [G]
+        return S_hat
+
+    # Arm-specific survival curves (TENSORS of shape [G])
+    S1_hat = arm_surv(w1)
+    S0_hat = arm_surv(w0)
+
+    # Survival difference (TENSOR [G])
+    diff_hat = S1_hat - S0_hat
+
+    return S1_hat, S0_hat, diff_hat
+
+def plugin_if_surv(time, delta, Tr, ps, t_grid):
+    """
+    Plug-in influence function for the survival difference
+        Δ(t) = S1(t) - S0(t)
+    based on IPW Nelson–Aalen estimator, treating propensity scores as fixed.
+
+    This computes the plug-in IF at a grid of time points t_grid, returning
+    an n x G tensor, where G = len(t_grid).
+
+    Parameters
+    ----------
+    time   : 1D tensor, shape [n]
+        Observed times T_i (event or censoring).
+    delta  : 1D tensor, shape [n]
+        Event indicator (1 = event, 0 = censored).
+    Tr     : 1D tensor, shape [n]
+        Treatment indicator A_i (0/1).
+    ps     : 1D tensor, shape [n]
+        Propensity scores e(X_i) = P(A=1 | X_i).
+    t_grid : 1D tensor or array-like, shape [G] or scalar
+        Time points at which to evaluate the survival difference.
+        Assumed (and recommended) to be sorted in ascending order.
+    ate    : int, default 1
+        Placeholder for estimand flag; here we always use ATE-type weights
+        (ω*(p) = 1), so this argument is currently ignored.
+
+    Returns
+    -------
+    phi : 2D tensor, shape [n, G]
+        Plug-in influence function values for Δ(t_g) at each t_g in t_grid.
+        Row i is IF_i(Δ(·)), column g is IF at t_grid[g].
+    """
+
+    # Work in double precision, treating ps as FIXED (no autograd)
+    time  = time.clone().detach().double()
+    delta = delta.clone().detach().double()
+    Tr    = Tr.clone().detach().double()
+    ps    = ps.clone().detach().double()
+
+    # t_grid -> 1D double tensor
+    if not torch.is_tensor(t_grid):
+        t_grid = torch.tensor(t_grid, dtype=torch.double)
+    t_grid = t_grid.clone().detach().double().view(-1)   # [G]
+    G = t_grid.shape[0]
+
+    n = time.shape[0]
+
+    # ATE-type weights for treated and control arms (ω*(p) = 1)
+    w1 = Tr / ps                   # A = 1
+    w0 = (1.0 - Tr) / (1.0 - ps)   # A = 0
+
+    # Distinct event times (any arm) up to max(t_grid)
+    t_max = t_grid.max()
+    mask_event = (delta == 1.0) & (time <= t_max)
+    event_times = torch.unique(time[mask_event])
+    event_times, _ = torch.sort(event_times)
+
+    # If no events ≤ max(t_grid), survival ≈ 1 and IF ≈ 0
+    if event_times.numel() == 0:
+        return torch.zeros(n, G, dtype=torch.double)
+
+    # Build at-risk and jump indicators over the event time grid
+    # event_times: [J]; time: [n]
+    t_mat = event_times.unsqueeze(0)   # [1, J]
+    time_mat = time.unsqueeze(1)       # [n, 1]
+
+    Y  = (time_mat >= t_mat).double()  # [n, J], at risk
+    dN = ((time_mat == t_mat) &
+          (delta.unsqueeze(1) == 1.0)).double()  # [n, J], event at t_j
+
+    def arm_if(w_a):
+        """
+        Compute IF for S_a(t) on t_grid for one arm a using plug-in formulas.
+
+        Returns
+        -------
+        IF_S : [n, G] tensor
+            Influence function for S_a(t_g) at each grid time t_g.
+        S_hat : [G] tensor
+            Estimated survival S_a(t_g) at each t_g.
+        """
+        WA = w_a.unsqueeze(1)   # [n, 1]
+
+        # Ψ2_hat(t_j; a) = E_n[w_a Y(t_j)]  (empirical mean over i)
+        Psi2_hat = (WA * Y).mean(dim=0)      # [J]
+        Psi2_hat = Psi2_hat.clamp_min(1e-10)
+
+        # Weighted NA increments:
+        # dΛ_hat_a(t_j) = sum_i w_a,i dN_i(t_j) / sum_i w_a,i Y_i(t_j)
+        num = (WA * dN).sum(dim=0)           # [J]
+        den = (WA * Y).sum(dim=0)           # [J]
+        den = den.clamp_min(1e-10)
+        dLambda_hat = num / den             # [J]
+
+        # Influence function for Λ_a(t_g):
+        # IF_i(Λ_a(t_g)) = Σ_{j: t_j ≤ t_g} 1/Ψ2_hat(t_j) * w_a,i {dN_ij - Y_ij dΛ_hat(t_j)}
+        inv_Psi2 = 1.0 / Psi2_hat           # [J]
+        # term_ij = 1/Ψ2_j * w_i * (dN_ij - Y_ij dΛ_hat_j)
+        term = inv_Psi2.unsqueeze(0) * WA * (dN - Y * dLambda_hat.unsqueeze(0))  # [n, J]
+
+        # For each grid time t_g, sum over j with t_j ≤ t_g
+        # mask_t[g, j] = 1{t_j ≤ t_g}
+        mask_t = (t_grid.unsqueeze(1) >= event_times.unsqueeze(0)).double()  # [G, J]
+        # IF_lambda[i, g] = Σ_j mask_t[g, j] * term[i, j]
+        IF_lambda = torch.matmul(term, mask_t.t())   # [n, G]
+
+        # Cumulative hazard at each t_g:
+        # Λ_hat(t_g) = Σ_{j: t_j ≤ t_g} dΛ_hat(t_j)
+        Lambda_grid = torch.matmul(mask_t, dLambda_hat)  # [G]
+
+        # Survival at each grid time: S_hat_a(t_g) = exp(-Λ_hat(t_g))
+        S_hat = torch.exp(-Lambda_grid)  # [G]
+
+        # IF for survival: IF_i(S_a(t_g)) = -S_a(t_g) * IF_i(Λ_a(t_g))
+        IF_S = -IF_lambda * S_hat.unsqueeze(0)  # [n, G]
+
+        return IF_S, S_hat
+
+    # Arm-specific IFs and survival estimates
+    IF_S1, S1_hat = arm_if(w1)   # [n, G], [G]
+    IF_S0, S0_hat = arm_if(w0)   # [n, G], [G]
+
+    # IF for survival difference Δ(t_g) = S1(t_g) - S0(t_g)
+    phi = IF_S1 - IF_S0   # [n, G]
+
+    return phi
+
+def if_var_surv(
+    ps_model,      # propensity NN, outputs ps in (0,1)
+    A,            # [N] {0,1} treatment
+    time,         # [N] survival time
+    delta,        # [N] event indicator
+    Z,            # [N, p] covariates (normalized, with intercept) used in LBC-Net
+    ck, h,        # [K], [K] kernel params
+    phi_ipw,      # [N, G] plug-in IF for Δ(t) treating PS as fixed
+    t_grid,       # [G] time grid
+    ate=1,
+    kernel_id=0
+):
+    """
+    Influence-function-based variance for the survival difference Δ(t) over a grid.
+
+    This function computes, for each time t_g in t_grid, the IF-corrected
+    variance of Δ(t_g) = S1(t_g) - S0(t_g), accounting for the effect of
+    the LBC-Net propensity model via implicit differentiation.
+
+    Parameters
+    ----------
+    ps_model : torch.nn.Module
+        Trained LBC-Net propensity model. Forward pass: ps_model(Z) -> ê(X).
+    A : 1D tensor, shape [N]
+        Treatment indicator (0/1).
+    time : 1D tensor, shape [N]
+        Survival times.
+    delta : 1D tensor, shape [N]
+        Event indicator (1 = event, 0 = censored).
+    Z : 2D tensor, shape [N, p]
+        Covariate matrix used for LBC-Net (already normalized, with intercept).
+    ck : 1D tensor, shape [K]
+        Kernel centers.
+    h : 1D tensor, shape [K]
+        Bandwidths corresponding to ck.
+    phi_ipw : 2D tensor, shape [N, G]
+        Plug-in influence function for Δ(t) at each grid time, treating PS as fixed
+        (from `plugin_if_surv`).
+    t_grid : 1D tensor, shape [G]
+        Time grid at which survival differences are evaluated.
+    ate : int, default 1
+        Estimand flag; here we always use ATE-type weights (ω*(p) = 1).
+    kernel_id : int, default 0
+        Kernel identifier (0 = Gaussian, 1 = Uniform, 2 = Epanechnikov).
+
+    Returns
+    -------
+    var_diff : 1D tensor, shape [G]
+        IF-based variance estimates of Δ(t_g) at each t_g in t_grid.
+    """
+
+    # Ensure proper dtypes/devices for autograd
+    device = next(ps_model.parameters()).device
+    A      = A.to(device=device, dtype=torch.float32)
+    time   = time.to(device=device, dtype=torch.float32)
+    delta  = delta.to(device=device, dtype=torch.float32)
+    Z      = Z.to(device=device, dtype=torch.float32)
+    ck     = ck.to(device=device, dtype=torch.float32)
+    h      = h.to(device=device, dtype=torch.float32)
+
+    if not torch.is_tensor(t_grid):
+        t_grid = torch.tensor(t_grid, dtype=torch.float32, device=device)
+    t_grid = t_grid.to(device=device, dtype=torch.float32).view(-1)  # [G]
+    G = t_grid.shape[0]
+
+    phi_ipw = phi_ipw.to(device=device, dtype=torch.float32)  # [N, G]
+
+    # --- forward pass for propensity (once, detached version for ψ_i) ---
+    with torch.no_grad():
+        p_detached = ps_model(Z).squeeze()  # [N], numeric ps
+
+    # --- build per-observation stacked moments ψ_i (no graph needed) ---
+    psi_i = lbc_net_moments(
+        propensity_scores=p_detached,
+        treatment=A,
+        Z=Z,
+        ck=ck,
+        h=h,
+        ate=ate,
+        kernel_id=kernel_id,
+    )  # [N, q]
+    N, q = psi_i.shape
+
+    # --- Jacobian M = ∂ mbar / ∂θ via autograd (only once, shared for all times) ---
+    params = tuple(ps_model.parameters())
+
+    p_graph = ps_model(Z).squeeze()  # [N], graph-enabled
+    psi_i_graph = lbc_net_moments(
+        propensity_scores=p_graph,
+        treatment=A,
+        Z=Z,
+        ck=ck,
+        h=h,
+        ate=ate,
+        kernel_id=kernel_id,
+    )  # [N, q], graph-enabled
+    mbar_graph = psi_i_graph.mean(0)  # [q]
+
+    rows = []
+    for j in range(q):
+        grads_j = torch.autograd.grad(
+            outputs=mbar_graph[j],
+            inputs=params,
+            retain_graph=True,
+            allow_unused=False,
+        )
+        rows.append(_flatten_grads(grads_j))  # helper: concat per-param grads
+    M = torch.stack(rows, dim=0)  # [q, dθ]
+
+    # --- column scaling for numerical stability ---
+    with torch.no_grad():
+        col_scale = psi_i.std(dim=0) + 1e-8  # [q]
+
+    psi_s = psi_i / col_scale          # (N x q)
+    M_s   = M / col_scale.unsqueeze(1) # (q x dθ)
+
+    # --- SVD for (M^T M)^(-1) via spectral shrinkage (once) ---
+    U, S, Vh = torch.linalg.svd(M_s, full_matrices=False)  # M_s = U Σ V^T
+    tau = 1e-3 * S.max()
+    mask = (S >= tau)
+    S_kept = S[mask]                      # [r]
+    V_kept = Vh[mask].T                   # (dθ x r)
+    lambda_adaptive = 0.01 * (S_kept**2).mean()
+
+    # --- compute Δ(t) for all grid times once (graph-enabled) ---
+    S1_hat_all, S0_hat_all, Delta_hat_all = ipw_surv_na(
+        time,
+        delta,
+        A,
+        p_graph,
+        t_grid,
+    )  # each is [G]
+
+    # --- allocate variance vector for Δ(t_g) ---
+    var_list = []
+
+    # Loop over each grid time to get g(t_g), chain term, and variance
+    for g_idx in range(G):
+        # Gradient of Δ(t_g) w.r.t. θ
+        Delta_g = Delta_hat_all[g_idx]  # scalar
+        grads_g = torch.autograd.grad(
+            outputs=Delta_g,
+            inputs=params,
+            retain_graph=True,
+            allow_unused=False,
+        )
+        gvec = _flatten_grads(grads_g)  # [dθ]
+
+        # project gradient into singular space of M_s
+        g_proj = (Vh @ gvec)[mask]  # [r]
+
+        # ridge solution: b = V_kept (g_proj / (Σ^2 + λ))
+        b = V_kept @ (g_proj / (S_kept**2 + lambda_adaptive))  # [dθ]
+
+        # chain term per observation: - ψ_i M b (using scaled ψ & M for stability)
+        S_chain = psi_s @ M_s @ b          # [N]
+        chain_per_obs = -S_chain           # [N]
+
+        # total IF at t_g = plug-in IF + chain correction
+        phi_g = chain_per_obs + phi_ipw[:, g_idx]  # [N]
+
+        # variance from centered IF
+        phi_centered = phi_g - phi_g.mean()
+        var_g = (phi_centered.pow(2).sum() / (N - 1)) / (N**2)  # scalar
+        var_list.append(var_g)
+
+    var_diff = torch.stack(var_list)  # [G]
+    return var_diff

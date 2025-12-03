@@ -13,7 +13,7 @@
 #'   The argument \code{ATE} must be specified: if \code{ATE = 1}, then \eqn{w^*(ps) = 1}; 
 #'   if \code{ATE = 0}, then \eqn{w^*(ps) = ps}. Ignored if \code{wt} is provided.
 #' @param wt A numeric vector of inverse probability weights (IPW) or other balancing weights. If provided, `ps` is ignored.
-#' @param ATE An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
+#' @param ate_flag An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
 #'   Average Treatment Effect (ATE) by weighting all observations equally. Setting it to 0 estimates the
 #'   Average Treatment Effect on the Treated (ATT), where only treated units are fully weighted while control
 #'   units are downweighted based on their propensity scores. Ignored if \code{wt} is provided.
@@ -72,7 +72,7 @@
 #' gsd(model)
 #' }
 #' @export
-gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 1, ...) {
+gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ate_flag = 1, ...) {
   # Extract from `lbc_net` object if provided
   if (!is.null(object)) {
     if (!inherits(object, "lbc_net")) {
@@ -81,7 +81,7 @@ gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 
     Z <- getLBC(object, "Z")  # Extract covariates
     Tr <- getLBC(object, "Tr")  # Extract treatment
     wt <- getLBC(object, "weights")  # Extract weights
-    ATE <- getLBC(object, "ATE")
+    ate_flag <- getLBC(object, "ate_flag")
   }
 
   # Ensure required inputs are provided
@@ -114,7 +114,7 @@ gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ATE = 
       stop("Error: `ps` (propensity scores) must be strictly between 0 and 1.")
     }
     N <- length(ps)
-    w_star <- if (ATE == 1) rep(1, N) else ps
+    w_star <- if (ate_flag == 1) rep(1, N) else ps
     wt <- w_star / (Tr * ps + (1 - Tr) * (1 - ps))
   }
 

@@ -25,22 +25,19 @@ sys.path.append(script_dir)
 
 from lbc_helpers import *
 
-def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h, 
+def run_lbc_net(data_df, Z_columns, T_column, ck, h, 
                 kernel = "gaussian", gpu=0, ate = 1,
                 seed=100, hidden_dim=100, L=2, 
                 vae_epochs=250, vae_lr=0.01, 
                 max_epochs=5000, lr=0.05, weight_decay=1e-5, 
                 balance_lambda=1.0, epsilon = 0.001, lsd_threshold=2, 
-                rolling_window=5, show_progress=True, compute_variance=True):
+                rolling_window=5, show_progress=True):
     """
     Runs the LBC-Net estimation for propensity score calculation.
 
     This function trains a Variational Autoencoder (VAE) to learn latent representations 
     of covariates and then uses an LBC-Net model to estimate propensity scores. It applies 
     kernel-based local balance adjustments to improve covariate balance.
-
-    If `Y_column` is provided, also computes an IPW estimand (ATE / ATT / Y)
-    and, if `compute_variance=True` and estimand != "Y", an IF-based SE and CI.
 
     Parameters:
     ----------
@@ -50,13 +47,6 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
         Names of covariate columns.
     T_column : str
         Name of the treatment assignment column.
-    Y_column : str or None, default None
-        Name of the outcome column in `data_df`. If None, only PS are estimated.
-    estimand : {"ATE", "ATT", "Y"}, default "ATE"
-        Target estimand when Y_column is not None.
-        - "ATE": Average Treatment Effect.
-        - "ATT": Average Treatment Effect on the Treated.
-        - "Y"  : Weighted mean outcome among treated.
     ck : list or numpy.ndarray
         Kernel center values for balance adjustment.
     h : list or numpy.ndarray
@@ -105,23 +95,17 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
         Number of past LSD values considered for early stopping.
     show_progress : bool, optional (default=True)
         Display progress bar for training epochs.
-    compute_variance : bool, optional (default=True)
-        Whether to compute IF-based standard errors and confidence intervals.
 
     Returns:
     -------
     dict
         A dictionary containing:
         - `"propensity_scores"`: List of estimated propensity scores.
+        - `"balance_loss"`: Value of the balance loss term.
+        - `"calibration_loss"`: Value of the calibration loss term.
         - `"total_loss"`: Total loss value.
         - `"max_lsd"`: Maximum LSD value.
         - `"mean_lsd"`: Mean LSD value
-
-        If Y_column is not None, also includes:
-            - "effect": float
-            - "se": float or None
-            - "ci_lower": float or None
-            - "ci_upper": float or None
     """
 
     # Set Device for Computation
@@ -153,13 +137,6 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
 
     T_numpy = data_df.loc[:, T_column].to_numpy(dtype="float32")  # Explicit NumPy conversion
     T = torch.tensor(T_numpy, dtype=torch.float32, device=device)
-
-    has_outcome = (Y_column is not None) and (Y_column in data_df.columns)
-    Y = None
-    if has_outcome:
-        Y_numpy = data_df.loc[:, Y_column].to_numpy(dtype="float32")
-        Y = torch.tensor(Y_numpy, dtype=torch.float32, device=device)
-
     n, p = Z.shape  # Number of samples (N) and covariates (p)
 
     # Normalize Covariates (Z)
@@ -204,12 +181,19 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
 
         start_time = time.time()  # Start timing
 
+    e = 1e-6  # Small constant for numerical stability
     for epoch in range(int(max_epochs)):
         ps_model.train()
         optimizer.zero_grad()
         outputs = ps_model(Z_norm).squeeze()
 
-        loss = lbc_net_loss(outputs, T, Z_norm, ck, h, ate=ate, kernel_id=kernel_id, balance_lambda = balance_lambda)
+        # Compute loss components
+        w = omega_calculate(outputs, ck, h, kernel_id)
+        w_stable = torch.where((torch.abs(w) < e) & (w != 0), torch.full_like(w, e), w)
+        
+        penalty = penalty_loss(outputs, T, ck, h, w_stable)
+        balance_loss = local_balance_ipw_loss(outputs, T, Z_norm, ck, h, w_stable, ate)
+        loss = balance_lambda * penalty + balance_loss
 
         loss.backward()
         optimizer.step()
@@ -233,7 +217,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
         if (epoch + 1) % 200 == 0:
             ps_model.eval()
             with torch.no_grad():
-                LSD_max, LSD_mean = lsd_cal(ps_model(Z_norm).squeeze(), T, Z, ck, h, kernel_id, ate = ate)
+                LSD_max, LSD_mean = lsd_cal(ps_model(Z_norm).squeeze(), T, Z, ck, h, kernel_id, ate)
                 lsd_window.append(LSD_max)
 
                 # Maintain the rolling window size
@@ -259,64 +243,17 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
     # Compute Final Propensity Scores
     with torch.no_grad():
         final_outputs = ps_model(Z_norm).squeeze()
-        final_LSD_max, final_LSD_mean = lsd_cal(final_outputs, T, Z, ck, h, kernel_id, ate = ate)
+        final_LSD_max, final_LSD_mean = lsd_cal(final_outputs, T, Z, ck, h, kernel_id, ate)
         ps = final_outputs.detach().cpu().numpy()
 
-    result = {
-        "propensity_scores": ps.tolist(),
-        "total_loss": float(loss.item()),
-        "max_lsd": float(final_LSD_max.item()),
-        "mean_lsd": float(final_LSD_mean.item()),
-    }
-
-    # -----------------------
-    # 7. Effect + variance (if Y is available)
-    # -----------------------
-    if has_outcome:
-        print("Starting post-processing: computing treatment effect and variance...")
-
-        estimand = str(estimand).upper()
-        effect = None
-        se_val = None
-        ci_lower = None
-        ci_upper = None
-
-        # Always get the plug-in IPW estimate (ATE / ATT / Y)
-        with torch.no_grad():
-            theta_hat = ipw_est(Y, T, final_outputs, estimand=estimand)
-            effect = float(theta_hat.detach().cpu().item())
-
-            # Plug-in IF treating PS as fixed (for this estimand)
-            phi_ipw = plug_in_if(Y, T, final_outputs, estimand=estimand)
-
-        # IF-based SE and CI only if requested 
-        if compute_variance:
-            se_t = if_var(
-                ps_model,
-                T,
-                Y,
-                Z_norm,
-                ck,
-                h,
-                phi_ipw,
-                ate=ate,
-                estimand=estimand,    
-                kernel_id=kernel_id,
-            )
-            # se_t may already be scalar; convert robustly
-            se_val = float(
-                se_t.detach().cpu().item() if hasattr(se_t, "detach") else se_t
-            )
-            ci_lower = effect - 1.96 * se_val
-            ci_upper = effect + 1.96 * se_val
-
-        # Attach to result
-        result["effect"] = effect
-        result["se"] = se_val
-        result["ci_lower"] = ci_lower
-        result["ci_upper"] = ci_upper
-    
     print("✅ LBC-Net training completed successfully.")
 
     # Return Results
-    return result
+    return {
+    "propensity_scores": ps.tolist(),
+    "balance_loss": balance_loss.item(),  
+    "calibration_loss": penalty.item(),   
+    "total_loss": loss.item(),
+    "max_lsd": final_LSD_max.item(),      
+    "mean_lsd": final_LSD_mean.item()            
+}

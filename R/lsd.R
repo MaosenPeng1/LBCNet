@@ -11,7 +11,7 @@
 #' @param h A numeric vector of bandwidths. If NULL, it is automatically calculated.
 #' @param K The number of grid points to use if `ck` is not provided. Default is 99.
 #' @param rho A scaling parameter used in bandwidth calculation. Default is 0.15.
-#' @param ATE An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
+#' @param ate_flag An integer (0 or 1) specifying the target estimand. The default is 1, which estimates the
 #'   Average Treatment Effect (ATE) by weighting all observations equally. Setting it to 0 estimates the
 #'   Average Treatment Effect on the Treated (ATT), where only treated units are fully weighted while control
 #'   units are downweighted based on their propensity scores. See Details in \code{\link{lbc_net}}.
@@ -65,7 +65,7 @@
 #' }
 #' @importFrom stats glm
 #' @export
-lsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, ck = NULL, h = NULL, K = 99, rho = 0.15, kernel = "gaussian", ATE = 1, ...) {
+lsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, ck = NULL, h = NULL, K = 99, rho = 0.15, kernel = "gaussian", ate_flag = 1, ...) {
   if (!is.null(object)) {
     if (!inherits(object, "lbc_net")) {
       stop("Error: `object` must be of class 'lbc_net'.")
@@ -76,7 +76,7 @@ lsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, ck = NULL, h = NU
     ck <- getLBC(object, "ck")
     h <- getLBC(object, "h")
     kernel <- getLBC(object, "kernel")
-    ATE <- getLBC(object, "ATE")
+    ate_flag <- getLBC(object, "ate_flag")
   } else {
 
     if (is.null(Z) || is.null(Tr) || is.null(ps)) {
@@ -117,11 +117,11 @@ lsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, ck = NULL, h = NU
     }
   }
 
-  compute_lsd <- function(X_col, ATE=1) {
+  compute_lsd <- function(X_col, ate_flag=1) {
     N <- length(ps)
     LSD <- numeric(length(ck))
 
-    w_star <- if (ATE == 1) rep(1, N) else ps
+    w_star <- if (ate_flag == 1) rep(1, N) else ps
 
     for (i in seq_along(ck)) {
       w <- 1 / h[i] * kernel_function((ck[i] - ps) / h[i], kernel)
@@ -144,12 +144,12 @@ lsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, ck = NULL, h = NU
   }
 
   if (is.matrix(Z) || is.data.frame(Z)) {
-    LSD_values <- apply(as.matrix(Z), 2, compute_lsd, ATE = ATE)
+    LSD_values <- apply(as.matrix(Z), 2, compute_lsd, ate_flag = ate_flag)
   } else {
-    LSD_values <- compute_lsd(Z, ATE = ATE)
+    LSD_values <- compute_lsd(Z, ate_flag = ate_flag)
   }
 
-  out <- list(LSD = LSD_values, LSD_mean = mean(abs(LSD_values)), LSD_max = max(abs(LSD_values)), ck = ck, h = h, Z = Z, Tr = Tr, K = K, rho = rho, kernel = kernel, ATE = ATE)
+  out <- list(LSD = LSD_values, LSD_mean = mean(abs(LSD_values)), LSD_max = max(abs(LSD_values)), ck = ck, h = h, Z = Z, Tr = Tr, K = K, rho = rho, kernel = kernel, ate_flag = ate_flag)
   class(out) <- "lsd"
   return(out)
 

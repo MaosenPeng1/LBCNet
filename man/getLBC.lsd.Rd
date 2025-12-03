@@ -22,7 +22,7 @@ Available options include:
   \item{`"h"`}{Bandwidth values used.}
   \item{`"K"`}{Number of kernel points.}
   \item{`"rho"`}{Span values used.}
-  \item{`"ATE"`}{ATE or ATT aim for estimate.}
+  \item{`"ate_flag"`}{ATE or ATT aim for estimate.}
   \item{`"kernel"`}{kernel used to define local neibourhood.}
 }}
 }
