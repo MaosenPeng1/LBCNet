@@ -1,0 +1,114 @@
+---
+title: "Quick Simulated Example with LBCNet"
+---
+
+## Purpose of This Example
+This example demonstrates how to apply LBCNet on a simulated dataset inspired by the misspecified propensity score model from Kang & Schafer (2007). Our goal is to estimate the mean outcome, assess covariate balance, and evaluate propensity score calibration using local system Python.
+
+## Simulate the Data
+We simulate data where the true propensity score model differs from the one used in the analysis, representing a challenging scenario for causal inference (misspecified propensity score model).
+
+```{r}
+# Load required packages
+library(MASS)
+
+# Set seed for reproducibility
+set.seed(123456)
+
+# Define sample size
+n <- 5000
+
+# Generate true covariates from a multivariate normal distribution
+Z <- MASS::mvrnorm(n, mu = rep(0, 4), Sigma = diag(4))
+
+# Generate true propensity scores
+prop <- 1 / (1 + exp(Z[,1] - 0.5 * Z[,2] + 0.25 * Z[,3] + 0.1 * Z[,4]))
+
+# Assign treatment based on propensity scores
+Tr <- rbinom(n, 1, prop)
+
+# Generate continuous outcome (correct model)
+Y <- 210 + 27.4 * Z[,1] + 13.7 * Z[,2] + 13.7 * Z[,3] + 13.7 * Z[,4] + rnorm(n)
+
+# Create a set of covariates for estimation (misspecified model)
+X <- cbind(
+  exp(Z[,1] / 2),
+  Z[,2] * (1 + exp(Z[,1]))^(-1) + 10,
+  ((Z[,1] * Z[,3]) / 25 + 0.6)^3,
+  (Z[,2] + Z[,4] + 20)^2
+)
+
+# Combine data into a data frame
+data <- data.frame(Y, Tr, X)
+colnames(data) <- c("Y", "Tr", "X1", "X2", "X3", "X4")
+
+# Quick look at the data
+head(data)
+```
+
+## Set Up Python Environment Using a Virtual Environment
+In this example, we set up LBCNet to run in a Python virtual environment called `"r-lbcnet"`.  
+Using a virtual environment ensures the Python packages needed for LBCNet are installed and isolated from other projects.
+
+```{r, results='hide', message=FALSE}
+library(LBCNet)
+
+# Set up LBCNet to use a virtual environment named "r-lbcnet"
+setup_lbcnet(
+  envname = "r-lbcnet",       # Name of the virtual environment
+  create_if_missing = TRUE   # Set to TRUE if you want LBCNet to create the environment automatically if it doesn't exist
+)
+```
+
+Here, `envname = "r-lbcnet"` specifies the name of the Python virtual environment and `create_if_missing = FALSE` means LBCNet will automatically create a new virtual environment and install the necessary Python dependencies (like torch) if it doesn't already exist.  
+
+## Fit the LBC-Net Model
+Estimate propensity scores using LBC-Net with the covariates `X1`, `X2`, `X3`, `X4`, and then compute the causal estimator (Inverse Probability Weighting estimator) of ATE.
+
+```{r}
+# Fit the LBC-Net model
+lbc_net.fit <- lbc_net(
+  data = data,
+  formula = Tr ~ X1 + X2 + X3 + X4,
+  Y = data$Y,
+  estimand = "ATE"
+)
+
+# Print the model fit object
+print(lbc_net.fit)
+```
+
+## Evaluate Propensity Score Estimation Performance
+Summarize the model and visualize the estimated propensity scores.
+```{r}
+# Summarize the fitted model
+summary(lbc_net.fit)
+
+# Mirror histogram for covariate distribution balance
+mirror_hist(lbc_net.fit)
+
+# Calibration plot to assess model calibration
+plot_calib(lbc_net.fit)
+```
+
+## Evaluate Covariate Balance
+```{r}
+# Compute local balance diagnostics
+lsd.fit <- lsd(lbc_net.fit)
+
+# Print and summarize local balance
+print(lsd.fit)
+summary(lsd.fit)
+
+# Plot local balance metrics
+plot(lsd.fit)
+```
+
+For a more detailed tutorial, visit our [Step-by-Step Tutorial](tutorial.qmd).
+
+
+
+
+
+
+

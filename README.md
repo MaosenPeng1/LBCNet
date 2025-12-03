@@ -2,8 +2,8 @@
 
 ## Description
 
-LBCNet implements LBC-Net for estimating propensity scores, as introduced in "A Deep Learning Approach to Nonparametric Propensity 
-Score Estimation with Optimized Covariate Balance." This package proposes a novel propensity score weighting method based on two fundamental 
+LBCNet implements LBC-Net for estimating propensity scores, as introduced in "Local Balance Calibration for Nonparametric Propensity 
+Score Estimation" This package proposes a novel propensity score weighting method based on two fundamental 
 conditions: local balance, which ensures conditional independence of covariates and treatment assignment across a dense grid of balancing scores, 
 and local calibration, which guarantees that the balancing scores are mapped to the true propensity scores. By leveraging a neural network, LBCNet 
 develops a nonparametric propensity score model that effectively optimizes covariate balance, minimizes bias, and stabilizes inverse probability of 
@@ -164,3 +164,31 @@ Or
 ```r
 remotes::install_github("MaosenPeng1/LBCNet")
 ```
+## Getting Started
+
+Explore the package with our easy-to-follow resources:
+
+- **[Simulated Example](https://maosenpeng1.github.io/LBCNet/articles/example.html)**  
+  A quick demo illustrating key package functions.
+
+- **[Comprehensive Tutorial](https://maosenpeng1.github.io/LBCNet/articles/tutorial.html)**  
+  A step-by-step guide covering model fitting, diagnostics, and survival extensions.
+
+## Acknowledgement
+
+This project is partially supported by the  
+[**Cancer Prevention & Research Institute of Texas (CPRIT)**](https://cprit.texas.gov)  
+under project **RP210130**.
+
+## Need Help?
+
+- **GitHub Repository:**  
+  https://github.com/MaosenPeng1/LBCNet
+
+- **Report Issues or Suggest Features:**  
+  https://github.com/MaosenPeng1/LBCNet/issues
+
+- **Contact:**  
+  [mpeng1@mdanderson.org](mailto:mpeng1@mdanderson.org)
+
+We welcome feedback, bug reports, and contributions!

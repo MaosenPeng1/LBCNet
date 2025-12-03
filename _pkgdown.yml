@@ -1,0 +1,13 @@
+template:
+  bootstrap: 5
+
+logo: inst/logo/logo.png
+
+articles:
+  - title: "Introduction & Workflow"
+    contents:
+      - tutorial
+
+  - title: "Examples"
+    contents:
+      - example

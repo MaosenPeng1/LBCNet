@@ -31,7 +31,10 @@ Imports:
     survival
 Suggests: 
     testthat (>= 3.0.0),
-    MASS
+    MASS,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
 Depends: 
     R (>= 4.0.0)
 RoxygenNote: 7.3.3
