@@ -256,44 +256,6 @@ lbc_net_surv <- function(data = NULL, formula = NULL,
     stop("'time', 'delta', and 'Tr' must have the same length.")
   }
   
-  # ---- Outcome leakage detection for survival (time, delta) ----
-  # Assumes `data`, `time_vec`, and `delta_vec` are defined
-  
-  bad_cols <- character(0)
-  
-  # Check which column(s) in `data` are identical to the time variable
-  matching_time <- vapply(
-    data,
-    function(col) isTRUE(all.equal(col, time_vec)),
-    logical(1)
-  )
-  time_cols_in_data <- names(data)[matching_time]
-  bad_cols <- c(bad_cols, time_cols_in_data)
-  
-  # Check which column(s) in `data` are identical to the delta variable
-  matching_delta <- vapply(
-    data,
-    function(col) isTRUE(all.equal(col, delta_vec)),
-    logical(1)
-  )
-  delta_cols_in_data <- names(data)[matching_delta]
-  bad_cols <- c(bad_cols, delta_cols_in_data)
-  
-  bad_cols <- unique(bad_cols)
-  
-  if (length(bad_cols) > 0L) {
-    warning(
-      sprintf(
-        "The survival outcome variables (time and/or delta) appear to be data column(s): %s.\n",
-        paste(bad_cols, collapse = ", ")
-      ),
-      "Including time or delta in the formula (e.g., Tr ~ .) causes outcome leakage\n",
-      "and invalidates the propensity model.\n",
-      "Use a formula such as:  Tr ~ . - time - delta\n",
-      call. = FALSE
-    )
-  }
-  
   ## 7. Apply NA action jointly to (Z, Tr, time, delta)
   tmp_all <- data.frame(Z, Tr = Tr, time = time_vec, delta = delta_vec)
   na_res  <- na.action(tmp_all)

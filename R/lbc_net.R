@@ -415,31 +415,6 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
       stop("Y must have the same length as the number of rows in Z.")
     }
   }
-  
-  # ---- Outcome leakage detection ----
-  if (!is.null(Y)) {
-    # Find columns identical to Y
-    matching_cols <- vapply(
-      data,
-      function(col) isTRUE(all.equal(col, Y)),
-      logical(1)
-    )
-    
-    y_cols_in_data <- names(data)[matching_cols]
-    
-    if (length(y_cols_in_data) > 0) {
-      warning(
-        sprintf(
-          "The outcome variable appears to be one of the data columns: %s.\n",
-          paste(y_cols_in_data, collapse = ", ")
-        ),
-        "Including the outcome in the formula (e.g., Tr ~ .) causes outcome leakage\n",
-        "and invalidates the propensity model.\n",
-        "Use a formula such as:  Tr ~ . - ", y_cols_in_data[1], "\n",
-        call. = FALSE
-      )
-    }
-  }
 
   # Apply NA action
   if (!is.null(Y)) {

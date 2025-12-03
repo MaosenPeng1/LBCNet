@@ -11,11 +11,11 @@ Authors@R: c(person("Maosen", "Peng", email = "your.email@example.com", role = c
               person("Liang", "Li", email = "LLi15@mdanderson.org", role = c("aut"), 
                     comment = c(Affiliation = "Department of Biostatistics, The University of Texas MD Anderson Cancer Center")))
 Description: Implements the Local Balance Calibration Network (LBC-Net), a deep learning approach for 
-nonparametric propensity score estimation that optimizes covariate balance through local balance and 
-calibration conditions. The package provides tools for treatment effect estimation, variance estimation via 
-influence-function methods, and support for survival estimands such as risk and survival differences. It 
-also includes diagnostics for assessing estimation performance, including local balance and calibration 
-checks.
+  nonparametric propensity score estimation that optimizes covariate balance through local balance and 
+  calibration conditions. The package provides tools for treatment effect estimation, variance estimation via 
+  influence-function methods, and support for survival estimands such as risk and survival differences. It 
+  also includes diagnostics for assessing estimation performance, including local balance and calibration 
+  checks.
 License: GPL (>= 3)
 Encoding: UTF-8
 LazyData: true
