@@ -32,9 +32,9 @@
 #'   
 #' @param Y Optional numeric vector of observed outcomes. If provided, `lbc_net`
 #'   will, in addition to estimating propensity scores, compute inverse probability
-#'   weighted estimates of a causal estimand (e.g., ATE or ATT) using the fitted
-#'   LBC-Net model. `Y` can be continuous or binary; the IPW formula is the same,
-#'   only the interpretation differs.
+#'   weighted estimates of a causal estimand (e.g., ATE or ATT) with influence-function-based
+#'   variance estimated using the fitted LBC-Net model. `Y` can be continuous or binary; 
+#'   the IPW formula is the same, only the interpretation differs.
 #'
 #' @param estimand Character string specifying the target estimand when an outcome
 #'   `Y` is supplied. Available options are:
@@ -43,8 +43,12 @@
 #'       \eqn{\omega^{*}(p_i) = 1} targets the combined population.}
 #'     \item{`"ATT"`}{Average Treatment Effect on the Treated. The frequency weight
 #'       function \eqn{\omega^{*}(p_i) = p_i} upweights units that are likely to be treated.}
-#'     \item{`"Y"`}{Weighted mean outcome among the treated group, using IPW weights
-#'       derived from the fitted propensity scores.}
+#'     \item{`"mu1"`}{Mean potential outcome under treatment (Tr=1),
+#'       \eqn{\mu_1 = \mathbb{E}\{Y(1)\}}, estimated by a weighted mean among treated units
+#'       using inverse probability weights derived from the fitted propensity scores.}
+#'     \item{`"mu0"`}{Mean potential outcome under control (Tr=0),
+#'       \eqn{\mu_0 = \mathbb{E}\{Y(0)\}}, estimated by a weighted mean among control units
+#'       using inverse probability weights derived from the fitted propensity scores.}
 #'   }
 #'   If `Y` is `NULL`, `estimand` is ignored and `lbc_net` only fits the propensity model. 
 #'   See **Details** for more information on ATT, ATE, and their corresponding weighting schemes.
@@ -342,7 +346,7 @@
 #'
 #' @export
 lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
-                    estimand = c("ATE", "ATT", "Y"), K = 99, rho = 0.15, na.action = na.fail,
+                    estimand = c("ATE", "ATT", "mu1", "mu0"), K = 99, rho = 0.15, na.action = na.fail,
                     gpu = 0, show_progress = TRUE, ..., setup_lbcnet_args = list()) {
   
   # Ensure Python is properly configured before running setup
@@ -354,7 +358,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
   }
   
   estimand <- match.arg(estimand)
-  ate_flag <- if (estimand %in% c("ATE", "Y")) 1L else 0L
+  ate_flag <- if (estimand %in% c("ATE", "mu1", "mu0")) 1L else 0L
 
   # Extract additional parameters from ...
   args <- list(...)

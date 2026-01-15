@@ -18,7 +18,8 @@ computed via \code{\link{est_effect}} without a variance estimate.}
 
 \item{type}{A character string specifying the treatment effect to estimate
 when using \code{\link{est_effect}}. Options:
-- `"Y"`: Computes the weighted mean outcome.
+- `"mu1"`: Computes the weighted mean outcome for Tr = 1.
+- `"mu0"`: Computes the weighted mean outcome for Tr = 0.
 - `"ATE"` (default): Computes the Average Treatment Effect.
 - `"ATT"`: Computes the Average Treatment Effect on the Treated.
 If the model already stores a treatment effect (from a call to

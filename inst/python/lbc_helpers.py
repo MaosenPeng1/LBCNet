@@ -448,7 +448,7 @@ def ipw_est(Y, T, ps, estimand="ATE"):
         Treatment assignment (0/1).
     ps : torch.Tensor, shape (n,)
         Propensity scores estimated by LBC-Net.
-    estimand : {"ATE","ATT","Y"}
+    estimand : {"ATE","ATT","mu1", "mu0"}
         Target causal estimand.
 
     Returns
@@ -457,7 +457,6 @@ def ipw_est(Y, T, ps, estimand="ATE"):
         Estimated causal estimand.
     """
 
-    estimand = estimand.upper()
     Y = Y.double()
     T = T.double()
     ps = ps.double()
@@ -504,10 +503,10 @@ def ipw_est(Y, T, ps, estimand="ATE"):
 
         tau = (num_treat / den_treat) - (num_ctrl / den_ctrl)
         return tau
-
-    # --------- Y (weighted mean among treated) ---------
-    elif estimand == "Y":
-        # frequency weight: w* = 1
+    
+    # --------- mu1: mean potential outcome under treatment ---------
+    elif estimand == "mu1":
+        # IPW weights: w_i = 1 / d_i, and among treated d_i = p_i
         wt = 1.0 / d
 
         num = torch.sum(T * wt * Y)
@@ -516,11 +515,26 @@ def ipw_est(Y, T, ps, estimand="ATE"):
         if den.item() == 0:
             return torch.tensor(float('nan'), device=Y.device)
 
-        muY = num / den
-        return muY
+        mu1 = num / den
+        return mu1
+
+
+    # --------- mu0: mean potential outcome under control ---------
+    elif estimand == "mu0":
+        # IPW weights: w_i = 1 / d_i, and among controls d_i = 1 - p_i
+        wt = 1.0 / d
+
+        num = torch.sum((1 - T) * wt * Y)
+        den = torch.sum((1 - T) * wt)
+
+        if den.item() == 0:
+            return torch.tensor(float('nan'), device=Y.device)
+
+        mu0 = num / den
+        return mu0
 
     else:
-        raise ValueError(f"Unknown estimand '{estimand}'. Use 'ATE', 'ATT', or 'Y'.")
+        raise ValueError(f"Unknown estimand '{estimand}'. Use 'ATE', 'ATT', 'mu0' or 'mu1'.")
 
 
 def plug_in_if(Y, T, p, estimand="ATE"):
@@ -531,7 +545,9 @@ def plug_in_if(Y, T, p, estimand="ATE"):
       - ATE: μ1 - μ0 using Hájek IPW with weights T/p and (1-T)/(1-p)
       - ATT: E[Y | T=1] - μ0,ATT where μ0,ATT is a Hájek reweighted
              control mean with weights proportional to p/(1-p)
-      - Y  : weighted mean outcome among treated using IPW weights
+      - mu1  : weighted mean outcome among treated using IPW weights
+             based on the fitted propensity scores.
+      - mu0  : weighted mean outcome among control using IPW weights
              based on the fitted propensity scores.
 
     Parameters
@@ -542,7 +558,7 @@ def plug_in_if(Y, T, p, estimand="ATE"):
         Treatment indicator (0/1).
     p : torch.Tensor, shape (n,)
         Propensity scores, treated as fixed (plug-in).
-    estimand : {"ATE", "ATT", "Y"}, default "ATE"
+    estimand : {"ATE", "ATT", "mu1", "mu0"}, default "ATE"
         Target estimand.
 
     Returns
@@ -554,10 +570,9 @@ def plug_in_if(Y, T, p, estimand="ATE"):
     T = T.double()
     p = p.double()
     n = Y.numel()
-    est = estimand.upper()
 
     # -------- ATE: standard Hájek IPW μ1 - μ0 --------
-    if est == "ATE":
+    if estimand == "ATE":
         # Treated: a1 = T/p, b1 = T*Y/p
         a1 = T / p
         b1 = T * Y / p
@@ -581,7 +596,7 @@ def plug_in_if(Y, T, p, estimand="ATE"):
         phi = phi1 - phi0
 
     # -------- ATT: mean treated - reweighted control mean --------
-    elif est == "ATT":
+    elif estimand == "ATT":
         # Treated mean μ1 = E[Y | T=1]
         a1 = T               # weights for treated
         b1 = T * Y
@@ -604,8 +619,8 @@ def plug_in_if(Y, T, p, estimand="ATE"):
 
         phi = phi1 - phi0
 
-    # -------- Y: weighted treated mean (IPW Hájek ratio) --------
-    elif est == "Y":
+    # -------- mu1: weighted treated mean (IPW Hájek ratio) --------
+    elif estimand == "mu1":
         # Here we mimic a generic Hájek ratio m = B/A:
         #   a_i = T_i * w_i
         #   b_i = T_i * w_i * Y_i
@@ -626,8 +641,27 @@ def plug_in_if(Y, T, p, estimand="ATE"):
         denom = A / n
         phi = (b - muY * a) / denom
 
+    # -------- mu0: weighted control mean (IPW Hájek ratio) --------
+    elif estimand == "mu0":
+        # Hájek ratio: m = B / A
+        # a_i = (1 - T_i) * w_i
+        # b_i = (1 - T_i) * w_i * Y_i
+        # with IPW weights w_i = 1 / d_i
+
+        d = T * p + (1.0 - T) * (1.0 - p)
+        w = 1.0 / d
+
+        a = (1.0 - T) * w
+        b = (1.0 - T) * w * Y
+        A = a.sum()
+        B = b.sum()
+        muY = B / A
+
+        denom = A / n
+        phi = (b - muY * a) / denom
+
     else:
-        raise ValueError(f"Unknown estimand '{estimand}'. use 'ATE', 'ATT', or 'Y'.")
+        raise ValueError(f"Unknown estimand '{estimand}'. use 'ATE', 'ATT', 'mu0' or 'mu1'.")
 
     return phi
 
@@ -783,7 +817,7 @@ def if_var(
         (from plug_in_if(..., estimand=...)).
     ate : {0,1}, default 1
         1 for ATE target, 0 for ATT target (affects moments).
-    estimand : {"ATE","ATT","Y"}, default "ATE"
+    estimand : {"ATE","ATT","mu1", "mu0"}, default "ATE"
         Target estimand for the EIF.
     kernel_id : {0,1,2}, default 0
         Kernel type: 0=Gaussian, 1=Uniform, 2=Epanechnikov.
@@ -793,8 +827,6 @@ def if_var(
     se : torch.Tensor (scalar)
         Estimated standard error of the IPW estimand.
     """
-
-    estimand = str(estimand).upper()
 
     # --- forward pass for propensity, no graph needed here ---
     p = model(Z).squeeze()           # [N], already sigmoid+clipped in your net

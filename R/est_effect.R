@@ -40,8 +40,8 @@ est_effect <- function(object, Y, ...) {
 #'   Required if `object` is NULL.
 #' @param type Character string specifying the desired estimate. The default is `"ATE"`, which computes
 #'   the average treatment effect. Setting `type = "ATT"` estimates the average treatment effect on the treated, while
-#'   `type = "Y"` returns the weighted mean outcome for the treated group (`Tr = 1`). If an object is provided, the estimate will be
-#'   consistent with the object's specification, but users can also select `"Y"`.
+#'   `type = "mu1", "mu0"` returns the weighted mean outcome for the treated group (`Tr = 1`) and control group (`Tr = 0`), respectively. 
+#'   If an object is provided, the estimate will be consistent with the object's specification, but users can also select `"Y"`.
 #' @param ... Additional arguments passed to the specific method.
 #'
 #' @return A numeric value representing the estimated quantity.
@@ -84,7 +84,7 @@ est_effect <- function(object, Y, ...) {
 #' wt <- runif(100, 0.5, 1.5)  # Random inverse probability weights
 #'
 #' # Manually specify Tr and wt
-#' est_effect(Y = Y, Tr = Tr, wt = wt, type = "Y")
+#' est_effect(Y = Y, Tr = Tr, wt = wt, type = "mu1")
 #' est_effect(Y = Y, Tr = Tr, wt = wt, type = "ATE")
 #' est_effect(Y = Y, Tr = Tr, wt = wt, type = "ATT")
 #'
@@ -106,17 +106,17 @@ est_effect.lbc_net <- function(object = NULL, Y, Tr = NULL, wt = NULL, type = "A
     Tr <- getLBC(object, "Tr")        # Extract treatment assignment
     wt <- getLBC(object, "weights")   # Extract inverse probability weights
     
-    # If user did NOT explicitly request type = "Y",
+    # If user did NOT explicitly request type = "m1" or "mu0",
     # infer ATE/ATT from the object.
-    if (missing(type) || type != "Y") {
+    if (missing(type) || !type %in% c("mu1", "mu0")) {
       type <- ifelse(getLBC(object, "ate_flag") == 1, "ATE", "ATT")
     }
   }
   
   ## 2. Validate type (to match test expectations)
-  valid_types <- c("Y", "ATE", "ATT")
+  valid_types <- c("mu1", "mu0", "ATE", "ATT")
   if (is.null(type) || length(type) != 1L || !type %in% valid_types) {
-    stop("Error: `type` must be one of 'Y', 'ATE', or 'ATT'.")
+    stop("Error: `type` must be one of 'mu1', 'mu0', 'ATE', or 'ATT'.")
   }
   
   ## 3. Ensure required inputs are provided
@@ -139,20 +139,30 @@ est_effect.lbc_net <- function(object = NULL, Y, Tr = NULL, wt = NULL, type = "A
   ## Helper: weighted mean
   wmean <- function(x, w) sum(w * x) / sum(w)
   
-  ## 5. Type = "Y": overall weighted mean, ignoring Tr
-  ##    (so it stays finite even if all Tr==0 or all Tr==1)
-  if (type == "Y") {
-    denom <- sum(wt)
-    if (denom == 0 || !is.finite(denom)) {
-      warning("Sum of weights is zero or non-finite. Returning NaN.")
-      return(NaN)
-    }
-    return(sum(wt * Y) / denom)
-  }
-  
-  ## 6. Prepare group masks for ATE/ATT
+  ## 5. Prepare group masks for ATE/ATT
   treated  <- (Tr == 1)
   control  <- (Tr == 0)
+  
+  ## 6. Type = "mu1": weighted mean for treated (Tr = 1); 
+  ## Type = "mu0": weighted mean outcome among controls (Tr = 0)
+  if (type == "mu1") {
+    denom <- sum(wt[treated])
+    if (denom == 0 || !is.finite(denom)) {
+      warning("Sum of treated weights is zero or non-finite. Returning NaN.")
+      return(NaN)
+    }
+    return(sum(wt[treated] * Y[treated]) / denom)
+  }
+  
+  ## 7. Type = "mu0": weighted mean outcome among controls (Tr = 0)
+  if (type == "mu0") {
+    denom <- sum(wt[control])
+    if (denom == 0 || !is.finite(denom)) {
+      warning("Sum of control weights is zero or non-finite. Returning NaN.")
+      return(NaN)
+    }
+    return(sum(wt[control] * Y[control]) / denom)
+  }
   
   ## 7. Type = "ATE"
   if (type == "ATE") {

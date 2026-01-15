@@ -45,7 +45,8 @@ print.lbc_net <- function(x, ...) {
     estimand_fit,
     "ATE" = "ATE (Average Treatment Effect)",
     "ATT" = "ATT (Average Treatment Effect on the Treated)",
-    "Y"   = "Y (Population Mean of the Treated Under Weights)"
+    "mu1"   = "mu1 (Population Mean of the Treated Under Weights)",
+    "mu0"   = "mu0 (Population Mean of the Control Under Weights)"
   )
   
   # Print concise overview

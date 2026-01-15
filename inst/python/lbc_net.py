@@ -39,7 +39,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
     of covariates and then uses an LBC-Net model to estimate propensity scores. It applies 
     kernel-based local balance adjustments to improve covariate balance.
 
-    If `Y_column` is provided, also computes an IPW estimand (ATE / ATT / Y)
+    If `Y_column` is provided, also computes an IPW estimand (ATE / ATT / mu1 / mu0)
     and, if `compute_variance=True` and estimand != "Y", an IF-based SE and CI.
 
     Parameters:
@@ -56,7 +56,8 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
         Target estimand when Y_column is not None.
         - "ATE": Average Treatment Effect.
         - "ATT": Average Treatment Effect on the Treated.
-        - "Y"  : Weighted mean outcome among treated.
+        - "mu1"  : Weighted mean outcome among treated.
+        - "mu0"  : Weighted mean outcome among control.
     ck : list or numpy.ndarray
         Kernel center values for balance adjustment.
     h : list or numpy.ndarray
@@ -275,13 +276,12 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
     if has_outcome:
         print("Starting post-processing: computing treatment effect and variance...")
 
-        estimand = str(estimand).upper()
         effect = None
         se_val = None
         ci_lower = None
         ci_upper = None
 
-        # Always get the plug-in IPW estimate (ATE / ATT / Y)
+        # Always get the plug-in IPW estimate (ATE / ATT / mu1/ mu0)
         with torch.no_grad():
             theta_hat = ipw_est(Y, T, final_outputs, estimand=estimand)
             effect = float(theta_hat.detach().cpu().item())

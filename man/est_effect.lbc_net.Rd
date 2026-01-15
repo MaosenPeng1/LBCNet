@@ -20,8 +20,8 @@ Required if `object` is NULL.}
 
 \item{type}{Character string specifying the desired estimate. The default is `"ATE"`, which computes
 the average treatment effect. Setting `type = "ATT"` estimates the average treatment effect on the treated, while
-`type = "Y"` returns the weighted mean outcome for the treated group (`Tr = 1`). If an object is provided, the estimate will be
-consistent with the object's specification, but users can also select `"Y"`.}
+`type = "mu1", "mu0"` returns the weighted mean outcome for the treated group (`Tr = 1`) and control group (`Tr = 0`), respectively. 
+If an object is provided, the estimate will be consistent with the object's specification, but users can also select `"Y"`.}
 
 \item{...}{Additional arguments passed to the specific method.}
 }
@@ -73,7 +73,7 @@ Tr <- rbinom(100, 1, 0.5)  # Random treatment assignment
 wt <- runif(100, 0.5, 1.5)  # Random inverse probability weights
 
 # Manually specify Tr and wt
-est_effect(Y = Y, Tr = Tr, wt = wt, type = "Y")
+est_effect(Y = Y, Tr = Tr, wt = wt, type = "mu1")
 est_effect(Y = Y, Tr = Tr, wt = wt, type = "ATE")
 est_effect(Y = Y, Tr = Tr, wt = wt, type = "ATT")
 
