@@ -95,7 +95,8 @@ est_effect <- function(object, Y, ...) {
 #'
 #' }
 #' @export
-est_effect.lbc_net <- function(object = NULL, Y, Tr = NULL, wt = NULL, type = "ATE", ...) {
+est_effect.lbc_net <- function(object = NULL, Y, Tr = NULL, wt = NULL,
+                               type = "ATE", ...) {
   
   ## 1. Extract from lbc_net object if provided
   if (!is.null(object)) {
@@ -103,17 +104,17 @@ est_effect.lbc_net <- function(object = NULL, Y, Tr = NULL, wt = NULL, type = "A
       stop("Error: `object` must be an object of class 'lbc_net'.")
     }
     
-    Tr <- getLBC(object, "Tr")        # Extract treatment assignment
-    wt <- getLBC(object, "weights")   # Extract inverse probability weights
+    Tr <- getLBC(object, "Tr")        # treatment assignment
+    wt <- getLBC(object, "weights")   # weights
     
-    # If user did NOT explicitly request type = "m1" or "mu0",
+    # If user did NOT explicitly request type = "mu1" or "mu0",
     # infer ATE/ATT from the object.
     if (missing(type) || !type %in% c("mu1", "mu0")) {
       type <- ifelse(getLBC(object, "ate_flag") == 1, "ATE", "ATT")
     }
   }
   
-  ## 2. Validate type (to match test expectations)
+  ## 2. Validate type
   valid_types <- c("mu1", "mu0", "ATE", "ATT")
   if (is.null(type) || length(type) != 1L || !type %in% valid_types) {
     stop("Error: `type` must be one of 'mu1', 'mu0', 'ATE', or 'ATT'.")
@@ -136,88 +137,78 @@ est_effect.lbc_net <- function(object = NULL, Y, Tr = NULL, wt = NULL, type = "A
   Tr <- as.numeric(Tr)
   wt <- as.numeric(wt)
   
-  ## Helper: weighted mean
-  wmean <- function(x, w) sum(w * x) / sum(w)
-  
-  ## 5. Prepare group masks for ATE/ATT
-  treated  <- (Tr == 1)
-  control  <- (Tr == 0)
-  
-  ## 6. Type = "mu1": weighted mean for treated (Tr = 1); 
-  ## Type = "mu0": weighted mean outcome among controls (Tr = 0)
+  ## 5. mu1 and mu0 in the requested "Tr * wt * Y" format
   if (type == "mu1") {
-    denom <- sum(wt[treated])
+    denom <- sum(Tr * wt)
     if (denom == 0 || !is.finite(denom)) {
-      warning("Sum of treated weights is zero or non-finite. Returning NaN.")
+      warning("Sum of weighted treated group is zero or non-finite. Returning NaN.")
       return(NaN)
     }
-    return(sum(wt[treated] * Y[treated]) / denom)
+    return(sum(Tr * wt * Y) / denom)
   }
   
-  ## 7. Type = "mu0": weighted mean outcome among controls (Tr = 0)
   if (type == "mu0") {
-    denom <- sum(wt[control])
+    denom <- sum((1 - Tr) * wt)
     if (denom == 0 || !is.finite(denom)) {
-      warning("Sum of control weights is zero or non-finite. Returning NaN.")
+      warning("Sum of weighted control group is zero or non-finite. Returning NaN.")
       return(NaN)
     }
-    return(sum(wt[control] * Y[control]) / denom)
+    return(sum((1 - Tr) * wt * Y) / denom)
   }
   
-  ## 7. Type = "ATE"
+  ## 6. ATE in the requested format
   if (type == "ATE") {
     
-    # Edge cases: all treated or all control
-    if (all(treated)) {
+    # Edge cases
+    if (all(Tr == 1)) {
       warning("All units are treated (Tr = 1). Cannot compute ATE.")
       return(NaN)
     }
-    if (all(control)) {
+    if (all(Tr == 0)) {
       warning("All units are control (Tr = 0). Cannot compute ATE.")
       return(NaN)
     }
     
-    denom_t <- sum(wt[treated])
-    denom_c <- sum(wt[control])
+    denom_t <- sum(Tr * wt)
+    denom_c <- sum((1 - Tr) * wt)
     
-    if (denom_t == 0 || denom_c == 0) {
-      warning("Treated or control group has zero total weight. Cannot compute ATE.")
+    if (denom_t == 0 || !is.finite(denom_t)) {
+      warning("Treated group sum is zero or non-finite. Cannot compute ATE.")
+      return(NaN)
+    }
+    if (denom_c == 0 || !is.finite(denom_c)) {
+      warning("Control group sum is zero or non-finite. Cannot compute ATE.")
       return(NaN)
     }
     
-    mu1 <- sum(wt[treated]  * Y[treated])  / denom_t
-    mu0 <- sum(wt[control]  * Y[control])  / denom_c
+    mu1 <- sum(Tr * wt * Y) / denom_t
+    mu0 <- sum((1 - Tr) * wt * Y) / denom_c
     
     return(mu1 - mu0)
   }
   
-  ## 8. Type = "ATT"
+  ## 7. ATT in the requested format
   if (type == "ATT") {
-    # ATT is among the treated; still need both groups to define contrast
     
-    if (all(!treated)) {
+    # Need treated units for ATT
+    denom_t <- sum(Tr)               # unweighted treated mean (as in your snippet)
+    denom_c <- sum((1 - Tr) * wt)    # weighted controls
+    
+    if (denom_t == 0 || !is.finite(denom_t)) {
       warning("No treated units (Tr = 1). Cannot compute ATT.")
       return(NaN)
     }
-    if (all(!control)) {
-      warning("No control units (Tr = 0). Cannot compute ATT.")
+    if (denom_c == 0 || !is.finite(denom_c)) {
+      warning("Control group sum is zero or non-finite. Cannot compute ATT.")
       return(NaN)
     }
     
-    denom_t <- sum(treated)          # unweighted mean among treated (your original choice)
-    denom_c <- sum(wt[control])      # weighted mean among controls
-    
-    if (denom_t == 0 || denom_c == 0) {
-      warning("Treated or control group has zero count/weight. Cannot compute ATT.")
-      return(NaN)
-    }
-    
-    mu1_treated <- sum(Y[treated])            / denom_t
-    mu0_treated <- sum(wt[control] * Y[control]) / denom_c
+    mu1_treated <- sum(Tr * Y) / denom_t
+    mu0_treated <- sum((1 - Tr) * wt * Y) / denom_c
     
     return(mu1_treated - mu0_treated)
   }
   
-  ## 9. Fallback (should be unreachable due to earlier type check)
-  stop("Error: `type` must be one of 'Y', 'ATE', or 'ATT'.")
+  ## Fallback (unreachable)
+  stop("Error: `type` must be one of 'mu1', 'mu0', 'ATE', or 'ATT'.")
 }

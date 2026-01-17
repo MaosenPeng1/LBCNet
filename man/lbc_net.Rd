@@ -51,16 +51,24 @@ the IPW formula is the same, only the interpretation differs.}
 \item{estimand}{Character string specifying the target estimand when an outcome
 `Y` is supplied. Available options are:
 \describe{
-  \item{`"ATE"`}{Average Treatment Effect. The frequency weight function
-    \eqn{\omega^{*}(p_i) = 1} targets the combined population.}
-  \item{`"ATT"`}{Average Treatment Effect on the Treated. The frequency weight
-    function \eqn{\omega^{*}(p_i) = p_i} upweights units that are likely to be treated.}
-  \item{`"mu1"`}{Mean potential outcome under treatment (Tr=1),
-    \eqn{\mu_1 = \mathbb{E}\{Y(1)\}}, estimated by a weighted mean among treated units
-    using inverse probability weights derived from the fitted propensity scores.}
-  \item{`"mu0"`}{Mean potential outcome under control (Tr=0),
-    \eqn{\mu_0 = \mathbb{E}\{Y(0)\}}, estimated by a weighted mean among control units
-    using inverse probability weights derived from the fitted propensity scores.}
+  \item{`"ATE"`}{Difference between weighted mean outcomes for units with
+    \eqn{Tr=1} and \eqn{Tr=0}. With frequency weight
+    \eqn{\omega^{*}(p_i)=1}, this targets the average treatment effect
+    under standard causal assumptions.}
+  \item{`"ATT"`}{Difference between the unweighted mean outcome among
+    units with \eqn{Tr=1} and a weighted mean outcome among units with
+    \eqn{Tr=0}. With frequency weight \eqn{\omega^{*}(p_i)=p_i}, this
+    targets the average treatment effect on the treated.}
+  \item{`"mu1"`}{Weighted mean outcome among units with \eqn{Tr=1},
+    computed as
+    \deqn{\sum_i Tr_i w_i Y_i \big/ \sum_i Tr_i w_i.}
+    Under causal assumptions, this corresponds to
+    \eqn{\mathbb{E}\{Y(1)\}}.}
+  \item{`"mu0"`}{Weighted mean outcome among units with \eqn{Tr=0},
+    computed as
+    \deqn{\sum_i (1-Tr_i) w_i Y_i \big/ \sum_i (1-Tr_i) w_i.}
+    Under causal assumptions, this corresponds to
+    \eqn{\mathbb{E}\{Y(0)\}}.}
 }
 If `Y` is `NULL`, `estimand` is ignored and `lbc_net` only fits the propensity model. 
 See **Details** for more information on ATT, ATE, and their corresponding weighting schemes.}

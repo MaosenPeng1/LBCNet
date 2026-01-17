@@ -39,16 +39,24 @@
 #' @param estimand Character string specifying the target estimand when an outcome
 #'   `Y` is supplied. Available options are:
 #'   \describe{
-#'     \item{`"ATE"`}{Average Treatment Effect. The frequency weight function
-#'       \eqn{\omega^{*}(p_i) = 1} targets the combined population.}
-#'     \item{`"ATT"`}{Average Treatment Effect on the Treated. The frequency weight
-#'       function \eqn{\omega^{*}(p_i) = p_i} upweights units that are likely to be treated.}
-#'     \item{`"mu1"`}{Mean potential outcome under treatment (Tr=1),
-#'       \eqn{\mu_1 = \mathbb{E}\{Y(1)\}}, estimated by a weighted mean among treated units
-#'       using inverse probability weights derived from the fitted propensity scores.}
-#'     \item{`"mu0"`}{Mean potential outcome under control (Tr=0),
-#'       \eqn{\mu_0 = \mathbb{E}\{Y(0)\}}, estimated by a weighted mean among control units
-#'       using inverse probability weights derived from the fitted propensity scores.}
+#'     \item{`"ATE"`}{Difference between weighted mean outcomes for units with
+#'       \eqn{Tr=1} and \eqn{Tr=0}. With frequency weight
+#'       \eqn{\omega^{*}(p_i)=1}, this targets the average treatment effect
+#'       under standard causal assumptions.}
+#'     \item{`"ATT"`}{Difference between the unweighted mean outcome among
+#'       units with \eqn{Tr=1} and a weighted mean outcome among units with
+#'       \eqn{Tr=0}. With frequency weight \eqn{\omega^{*}(p_i)=p_i}, this
+#'       targets the average treatment effect on the treated.}
+#'     \item{`"mu1"`}{Weighted mean outcome among units with \eqn{Tr=1},
+#'       computed as
+#'       \deqn{\sum_i Tr_i w_i Y_i \big/ \sum_i Tr_i w_i.}
+#'       Under causal assumptions, this corresponds to
+#'       \eqn{\mathbb{E}\{Y(1)\}}.}
+#'     \item{`"mu0"`}{Weighted mean outcome among units with \eqn{Tr=0},
+#'       computed as
+#'       \deqn{\sum_i (1-Tr_i) w_i Y_i \big/ \sum_i (1-Tr_i) w_i.}
+#'       Under causal assumptions, this corresponds to
+#'       \eqn{\mathbb{E}\{Y(0)\}}.}
 #'   }
 #'   If `Y` is `NULL`, `estimand` is ignored and `lbc_net` only fits the propensity model. 
 #'   See **Details** for more information on ATT, ATE, and their corresponding weighting schemes.
@@ -359,15 +367,15 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
   
   estimand <- match.arg(estimand)
   ate_flag <- if (estimand %in% c("ATE", "mu1", "mu0")) 1L else 0L
-
+  
   # Extract additional parameters from ...
   args <- list(...)
-
+  
   # Extract optional kernel weighting parameters
   ck <- if (!is.null(args$ck)) args$ck else NULL
   h <- if ("h" %in% names(args)) args$h else NULL
   kernel <- if (!is.null(args$kernel)) args$kernel else "gaussian"
-
+  
   # Extract NN model tuning parameters
   seed <- if (!is.null(args$seed)) args$seed else 100
   hidden_dim <- if (!is.null(args$hidden_dim)) args$hidden_dim else 100
@@ -381,23 +389,23 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
   epsilon <- if (!is.null(args$epsilon)) args$epsilon else 0.001
   lsd_threshold <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 2
   rolling_window <- if (!is.null(args$rolling_window)) args$rolling_window else 5
-
+  
   # Load Python script
   script_path <- system.file("python", "lbc_net.py", package = "LBCNet")
   mymodule <- reticulate::import_from_path("lbc_net", path = system.file("python", package = "LBCNet"))
-
+  
   # Handle formula-based input
   if (!is.null(formula) && !is.null(data)) {
     model_frame <- model.frame(formula, data, na.action = na.action)
     Tr <- model.response(model_frame)
     Z <- model.matrix(attr(model_frame, "terms"), model_frame)
-
+    
     # Drop intercept if exists
     if ("(Intercept)" %in% colnames(Z)) {
       Z <- Z[, -1, drop = FALSE]
     }
   }
-
+  
   # Ensure valid input
   if (is.null(Z) || is.null(Tr)) {
     stop("Either provide a formula with a dataframe or specify Z and Tr directly as a matrix and vector.")
@@ -419,7 +427,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
       stop("Y must have the same length as the number of rows in Z.")
     }
   }
-
+  
   # Apply NA action
   if (!is.null(Y)) {
     dat_all <- data.frame(Z, Tr = Tr, Y = Y)
@@ -435,7 +443,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
     Z  <- as.matrix(na_result[, -ncol(na_result), drop = FALSE])
     Tr <- na_result[, ncol(na_result)]
   }
-
+  
   # Convert Tr to numeric
   Tr <- as.numeric(Tr)
   
@@ -447,12 +455,12 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
       stop("All units are control (Tr = 0). Cannot compute ATE/ATT.")
     }
   }
-
+  
   # Calculate propensity scores for ck/h calculation
   message("Calculating propensity scores for ck/h calculation...")
   log.fit <- glm(Tr ~ ., data = as.data.frame(Z), family = "binomial")
   ps_log <- log.fit$fitted.values
-
+  
   # Auto-calculate `ck` based on `K` if not provided
   if (is.null(ck)) {
     ck <- seq(1 / (K + 1), K / (K + 1), length.out = K)
@@ -461,7 +469,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
       stop("`ck` must be a numeric vector with values strictly between 0 and 1.")
     }
   }
-
+  
   # Auto-calculate `h` if not provided
   if (is.null(h)) {
     h <- span_bw(rho, ck, ps_log)
@@ -469,7 +477,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
     if (!is.numeric(h)) stop("`h` must be a numeric vector.")
     if (length(h) != length(ck)) stop("`h` must have the same length as `ck`.")
   }
-
+  
   # Ensure Z has column names
   if (is.null(colnames(Z))) {
     colnames(Z) <- paste0("V", seq_len(ncol(Z)))  # Assign generic names V1, V2, V3, ...
@@ -514,18 +522,18 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
     show_progress = show_progress,
     compute_variance = compute_variance
   )
-
+  
   # Extract individual components from returned dictionary
   propensity_scores <- result$propensity_scores
   total_loss <- result$total_loss
   lsd_max <- result$max_lsd
   lsd_mean <- result$mean_lsd
-
+  
   # IPW weights (frequency weight ω*(p): 1 for ATE/Y, p for ATT)
   N <- length(propensity_scores)
   w_star <- if (ate_flag == 1L) rep(1, N) else propensity_scores
   ipw <- w_star / (Tr * propensity_scores + (1 - Tr) * (1 - propensity_scores))
-
+  
   out <- list(
     fitted.values = propensity_scores,
     weights = ipw,
@@ -570,8 +578,8 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
     out$se <- result$se
     out$ci <- c(lower = result$ci_lower, upper = result$ci_upper)
   }
-
+  
   class(out) <- "lbc_net"  # Assign class to make it compatible with S3 methods
   return(out)
-
+  
 }
