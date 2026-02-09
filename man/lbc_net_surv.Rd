@@ -157,6 +157,11 @@ recorded in the output object.}
     \item{`balance_lambda`}{A numeric value controlling the relative contributions of the local balance loss (\eqn{Q_1})
   and calibration loss (\eqn{Q_2}) in the objective function, where the total loss is defined as
   \eqn{Q = Q_1 + \lambda Q_2}. Default is `1.0`. }
+  
+    \item{alpha}{Nonnegative regularization parameter controlling numerical stabilization of the estimator.
+  The default value \code{alpha = 0.01} provides stable estimation and near-nominal inference
+  across a wide range of settings. Values in the range \code{[1e-4, 1e-1]} generally yield
+  similar results; larger values may induce overly conservative variance estimates.}
 
     \item{`epsilon`}{A small numeric value controlling the lower and upper bounds of the
   estimated propensity scores. The default is `0.001`, ensuring scores remain within

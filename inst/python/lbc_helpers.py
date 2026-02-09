@@ -778,6 +778,7 @@ def if_var(
     estimand="ATE", # {"ATE","ATT","Y"} – affects moments and Δ
     kernel_id=0,    # pass-through for omega_calculate
     balance_lambda=1.0,
+    alpha = 0.01,
 ):
     """
     Influence-function-based SE for an IPW estimand with LBC-Net PS.
@@ -821,6 +822,10 @@ def if_var(
         Target estimand for the EIF.
     kernel_id : {0,1,2}, default 0
         Kernel type: 0=Gaussian, 1=Uniform, 2=Epanechnikov.
+    balance_lambda : float, default 1.0
+        Scaling factor for calibration moments in the loss.
+    alpha : float, default 0.01
+        Small ridge penalty factor for stabilizing the chain correction.
 
     Returns
     -------
@@ -897,7 +902,7 @@ def if_var(
     V_kept = Vh[mask].T
     g_proj = (Vh @ gvec)[mask]
 
-    lambda_adaptive = 0.01 * (S_kept**2).mean()
+    lambda_adaptive = alpha * (S_kept**2).mean()
 
     # Ridge in singular space: b = V ( (V^T g) / (Σ^2 + λ) )
     b = V_kept @ (g_proj / (S_kept**2 + lambda_adaptive))  # [dθ]
@@ -1163,6 +1168,7 @@ def if_var_surv(
     ate=1,
     kernel_id=0,
     balance_lambda=1.0,
+    alpha = 0.01,
 ):
     """
     Influence-function-based variance for the survival difference Δ(t) over a grid.
@@ -1196,6 +1202,10 @@ def if_var_surv(
         Estimand flag; here we always use ATE-type weights (ω*(p) = 1).
     kernel_id : int, default 0
         Kernel identifier (0 = Gaussian, 1 = Uniform, 2 = Epanechnikov).
+    balance_lambda : float, default 1.0
+        Scaling factor for calibration moments in the LBC-Net loss.
+    alpha : float, default 0.01
+        Small ridge penalty factor for stabilizing the chain correction.
 
     Returns
     -------
@@ -1259,7 +1269,7 @@ def if_var_surv(
     mask = (S >= tau)
     S_kept = S[mask]                      # [r]
     V_kept = Vh[mask].T                   # (dθ x r)
-    lambda_adaptive = 0.01 * (S_kept**2).mean()
+    lambda_adaptive = alpha * (S_kept**2).mean()
 
     # --- compute Δ(t) for all grid times once (graph-enabled) ---
     G = t_grid.shape[0]

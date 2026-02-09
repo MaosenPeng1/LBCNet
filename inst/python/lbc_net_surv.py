@@ -42,6 +42,7 @@ def run_lbc_net_surv(
     lr=0.05,
     weight_decay=1e-5,
     balance_lambda=1.0,
+    alpha=0.01,
     epsilon=0.001,
     lsd_threshold=2,
     rolling_window=5,
@@ -98,6 +99,8 @@ def run_lbc_net_surv(
         L2 regularization for optimizer.
     balance_lambda : float, default 1.0
         Weight on calibration term in LBC-Net loss.
+    alpha : float, default 0.01
+        Small ridge penalty factor for stabilizing the chain correction.
     epsilon : float, default 0.001
         Propensity score bounding parameter.
     lsd_threshold : float, default 2
@@ -333,6 +336,7 @@ def run_lbc_net_surv(
         t_grid = t_grid_t,
         ate=ate_flag,
         kernel_id=kernel_id,
+        alpha=alpha,
     )
 
     # Convert to CPU numpy arrays

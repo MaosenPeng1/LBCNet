@@ -185,6 +185,7 @@ lbc_net_surv <- function(data = NULL, formula = NULL,
   lr                <- if (!is.null(args$lr)) args$lr else 0.05
   weight_decay      <- if (!is.null(args$weight_decay)) args$weight_decay else 1e-5
   balance_lambda    <- if (!is.null(args$balance_lambda)) args$balance_lambda else 1.0
+  alpha             <- if (!is.null(args$alpha)) args$alpha else 0.01
   epsilon           <- if (!is.null(args$epsilon)) args$epsilon else 0.001
   lsd_threshold     <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 2
   rolling_window    <- if (!is.null(args$rolling_window)) args$rolling_window else 5
@@ -369,6 +370,7 @@ lbc_net_surv <- function(data = NULL, formula = NULL,
     lr             = lr,
     weight_decay   = weight_decay,
     balance_lambda = balance_lambda,
+    alpha          = alpha,
     epsilon        = epsilon,
     lsd_threshold  = lsd_threshold,
     rolling_window = as.integer(rolling_window),
@@ -418,6 +420,7 @@ lbc_net_surv <- function(data = NULL, formula = NULL,
       lr                = lr,
       weight_decay      = weight_decay,
       balance_lambda    = balance_lambda,
+      alpha             = alpha,
       epsilon           = epsilon
     ),
     stopping_criteria = list(

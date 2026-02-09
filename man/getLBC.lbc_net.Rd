@@ -27,7 +27,7 @@
     }
 
     \item{"parameters"}{Model hyperparameters such as hidden_dim, L, vae_lr, lr,
-      weight_decay, balance_lambda, epsilon.}
+      weight_decay, balance_lambda, alpha, epsilon.}
 
     \item{"stopping_criteria"}{Stopping parameters including lsd_threshold,
       rolling_window, and max_epochs.}

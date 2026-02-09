@@ -30,7 +30,7 @@
       \code{\link{lsd}} for further evaluation.}
     \item{\code{"parameters"}}{Model hyperparameters including (typically)
       \code{hidden_dim}, \code{num_hidden_layers}, \code{vae_lr}, \code{lr},
-      \code{weight_decay}, \code{balance_lambda}, \code{epsilon}.}
+      \code{weight_decay}, \code{balance_lambda}, \code{alpha}, \code{epsilon}.}
     \item{\code{"stopping_criteria"}}{Stopping parameters including
       \code{lsd_threshold}, \code{rolling_window}, and \code{max_epochs}.}
     \item{\code{"seed"}}{Random seed used for reproducibility.}

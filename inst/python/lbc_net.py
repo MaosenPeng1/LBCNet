@@ -30,7 +30,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
                 seed=100, hidden_dim=100, L=2, 
                 vae_epochs=250, vae_lr=0.01, 
                 max_epochs=5000, lr=0.05, weight_decay=1e-5, 
-                balance_lambda=1.0, epsilon = 0.001, lsd_threshold=2, 
+                balance_lambda=1.0, epsilon = 0.001, lsd_threshold=2, alpha = 0.01,
                 rolling_window=5, show_progress=True, compute_variance=True):
     """
     Runs the LBC-Net estimation for propensity score calculation.
@@ -95,6 +95,8 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
         Learning rate for the LBC-Net optimizer.
     weight_decay : float, optional (default=1e-5)
         L2 regularization (weight decay) for optimizer.
+    alpha : float, optional (default=0.01)
+        Small ridge penalty factor for stabilizing the chain correction.
 
     Stopping Criteria:
     ------------------
@@ -302,6 +304,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
                 ate=ate,
                 estimand=estimand,    
                 kernel_id=kernel_id,
+                alpha=alpha,
             )
             # se_t may already be scalar; convert robustly
             se_val = float(

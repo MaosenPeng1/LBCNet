@@ -146,6 +146,11 @@
 #'     \item{`balance_lambda`}{A numeric value controlling the relative contributions of the local balance loss (\eqn{Q_1})
 #'   and calibration loss (\eqn{Q_2}) in the objective function, where the total loss is defined as
 #'   \eqn{Q = Q_1 + \lambda Q_2}. Default is `1.0`. }
+#'   
+#'     \item{alpha}{Nonnegative regularization parameter controlling numerical stabilization of the estimator.
+#'   The default value \code{alpha = 0.01} provides stable estimation and near-nominal inference
+#'   across a wide range of settings. Values in the range \code{[1e-4, 1e-1]} generally yield
+#'   similar results; larger values may induce overly conservative variance estimates.}
 #'
 #'     \item{`epsilon`}{A small numeric value controlling the lower and upper bounds of the
 #'   estimated propensity scores. The default is `0.001`, ensuring scores remain within
@@ -386,6 +391,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
   lr <- if (!is.null(args$lr)) args$lr else 0.05
   weight_decay <- if (!is.null(args$weight_decay)) args$weight_decay else 1e-5
   balance_lambda <- if (!is.null(args$balance_lambda)) args$balance_lambda else 1.0
+  alpha <- if (!is.null(args$alpha)) args$alpha else 0.01
   epsilon <- if (!is.null(args$epsilon)) args$epsilon else 0.001
   lsd_threshold <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 2
   rolling_window <- if (!is.null(args$rolling_window)) args$rolling_window else 5
@@ -516,6 +522,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
     lr = lr,
     weight_decay = weight_decay,
     balance_lambda = balance_lambda,
+    alpha = alpha,
     epsilon = epsilon,
     lsd_threshold = lsd_threshold,
     rolling_window = as.integer(rolling_window),
@@ -549,6 +556,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
       lr = lr,
       weight_decay = weight_decay,
       balance_lambda = balance_lambda,
+      alpha   = alpha,
       epsilon = epsilon
     ),
     stopping_criteria = list(
