@@ -322,7 +322,7 @@ def run_lbc_net_surv(
 
     # IF-based variance accounting for LBC-Net PS estimation
     var_diff_t = if_var_surv(
-        ps_model=ps_model,
+        model=ps_model,
         A=T,
         time=time_t,
         delta=delta_t,

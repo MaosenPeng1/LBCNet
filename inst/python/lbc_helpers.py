@@ -1152,7 +1152,7 @@ def plugin_if_surv(time, delta, Tr, ps, t_grid):
     return phi
 
 def if_var_surv(
-    ps_model,      # propensity NN, outputs ps in (0,1)
+    model,      # propensity NN, outputs ps in (0,1)
     A,            # [N] {0,1} treatment
     time,         # [N] survival time
     delta,        # [N] event indicator
@@ -1161,7 +1161,8 @@ def if_var_surv(
     phi_ipw,      # [N, G] plug-in IF for Δ(t) treating PS as fixed
     t_grid,       # [G] time grid
     ate=1,
-    kernel_id=0
+    kernel_id=0,
+    balance_lambda=1.0,
 ):
     """
     Influence-function-based variance for the survival difference Δ(t) over a grid.
@@ -1202,42 +1203,26 @@ def if_var_surv(
         IF-based variance estimates of Δ(t_g) at each t_g in t_grid.
     """
 
-    # Ensure proper dtypes/devices for autograd
-    device = next(ps_model.parameters()).device
-    A      = A.to(device=device, dtype=torch.float32)
-    time   = time.to(device=device, dtype=torch.float32)
-    delta  = delta.to(device=device, dtype=torch.float32)
-    Z      = Z.to(device=device, dtype=torch.float32)
-    ck     = ck.to(device=device, dtype=torch.float32)
-    h      = h.to(device=device, dtype=torch.float32)
-
-    if not torch.is_tensor(t_grid):
-        t_grid = torch.tensor(t_grid, dtype=torch.float32, device=device)
-    t_grid = t_grid.to(device=device, dtype=torch.float32).view(-1)  # [G]
-    G = t_grid.shape[0]
-
-    phi_ipw = phi_ipw.to(device=device, dtype=torch.float32)  # [N, G]
-
     # --- forward pass for propensity (once, detached version for ψ_i) ---
-    with torch.no_grad():
-        p_detached = ps_model(Z).squeeze()  # [N], numeric ps
+    p = model(Z).squeeze()           # [N], already sigmoid+clipped in your net
+    params = tuple(model.parameters())
 
     # --- build per-observation stacked moments ψ_i (no graph needed) ---
     psi_i = lbc_net_moments(
-        propensity_scores=p_detached,
+        propensity_scores=p.detach(),
         treatment=A,
         Z=Z,
         ck=ck,
         h=h,
         ate=ate,
         kernel_id=kernel_id,
+        balance_lambda=balance_lambda,
     )  # [N, q]
     N, q = psi_i.shape
 
     # --- Jacobian M = ∂ mbar / ∂θ via autograd (only once, shared for all times) ---
-    params = tuple(ps_model.parameters())
-
-    p_graph = ps_model(Z).squeeze()  # [N], graph-enabled
+    # Now, rebuild ψ_i with graph-enabled p(θ) so that we can differentiate.
+    p_graph = model(Z).squeeze()     # [N], graph-enabled
     psi_i_graph = lbc_net_moments(
         propensity_scores=p_graph,
         treatment=A,
@@ -1246,8 +1231,9 @@ def if_var_surv(
         h=h,
         ate=ate,
         kernel_id=kernel_id,
-    )  # [N, q], graph-enabled
-    mbar_graph = psi_i_graph.mean(0)  # [q]
+        balance_lambda=balance_lambda
+    )                                # [N, q] with graph
+    mbar_graph = psi_i_graph.mean(0) # [q]
 
     rows = []
     for j in range(q):
@@ -1276,6 +1262,7 @@ def if_var_surv(
     lambda_adaptive = 0.01 * (S_kept**2).mean()
 
     # --- compute Δ(t) for all grid times once (graph-enabled) ---
+    G = t_grid.shape[0]
     S1_hat_all, S0_hat_all, Delta_hat_all = ipw_surv_na(
         time,
         delta,
@@ -1314,7 +1301,7 @@ def if_var_surv(
 
         # variance from centered IF
         phi_centered = phi_g - phi_g.mean()
-        var_g = (phi_centered.pow(2).sum() / (N - 1)) / (N**2)  # scalar
+        var_g = (phi_centered.pow(2).sum() / (N - 1)) / N  # scalar
         var_list.append(var_g)
 
     var_diff = torch.stack(var_list)  # [G]
