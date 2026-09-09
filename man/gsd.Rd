@@ -15,7 +15,10 @@ gsd(
 )
 }
 \arguments{
-\item{object}{An optional object of class `"lbc_net"`, from which `Z`, `Tr`, and `weights` are extracted.}
+\item{object}{An optional object of class `"lbc_net"` or `"m_lbcnet"`.
+For a binary fit, `Z`, `Tr`, and `weights` are extracted. For an
+M-LBCNet fit, treatment-versus-population and pairwise diagnostics are
+computed from the joint generalized propensity scores.}
 
 \item{Z}{A numeric matrix, data frame, or vector of covariates. Required if `object` is not provided.}
 
@@ -38,7 +41,10 @@ See \code{\link{lbc_net}} for more information on ATT, ATE, and their correspond
 \item{...}{Additional arguments passed to the specific method.}
 }
 \value{
-A numeric vector containing GSD values for each covariate.
+For a binary treatment, a numeric vector containing GSD values for
+  each covariate. For an `"m_lbcnet"` object, a list with two data frames:
+  `versus_population`, the primary diagnostic, and `pairwise`, the secondary
+  diagnostic. Original treatment labels are retained.
 }
 \description{
 Estimates the Global Standardized Mean Difference (GSD), a standardized mean difference
@@ -73,6 +79,14 @@ where:
   }
 
 Automatic Extraction from `lbc_net` Object if an `lbc_net` object is provided.
+
+For M-LBCNet, arm \eqn{t} uses weights
+\eqn{a_{it}=R_{it}/\pi_{it}} and the common ATE population uses
+\eqn{b_i=1}. Pairwise comparisons replace \eqn{b_i} with
+\eqn{a_{is}=R_{is}/\pi_{is}}. Both use the implemented binary
+weighted-variance convention (division by total weight), effective sample
+sizes \eqn{m=(\sum_i w_i)^2/\sum_i w_i^2}, and the pooled standardizer
+shown above. M-LBCNet GSD values are reported in absolute value.
 }
 \examples{
 

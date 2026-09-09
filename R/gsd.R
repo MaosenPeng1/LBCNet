@@ -4,7 +4,10 @@
 #' used for assessing balance in covariate distributions between treatment groups.
 #' The GSD is reported as a percentage and is widely used in propensity score weighting methods.
 #'
-#' @param object An optional object of class `"lbc_net"`, from which `Z`, `Tr`, and `weights` are extracted.
+#' @param object An optional object of class `"lbc_net"` or `"m_lbcnet"`.
+#'   For a binary fit, `Z`, `Tr`, and `weights` are extracted. For an
+#'   M-LBCNet fit, treatment-versus-population and pairwise diagnostics are
+#'   computed from the joint generalized propensity scores.
 #' @param Z A numeric matrix, data frame, or vector of covariates. Required if `object` is not provided.
 #' @param Tr A numeric vector (0/1) indicating treatment assignment. Required if `object` is not provided.
 #' @param ps A numeric vector of propensity scores (\eqn{0 < ps < 1}). 
@@ -20,7 +23,10 @@
 #'   See \code{\link{lbc_net}} for more information on ATT, ATE, and their corresponding weighting schemes.
 #' @param ... Additional arguments passed to the specific method.
 #'
-#' @return A numeric vector containing GSD values for each covariate.
+#' @return For a binary treatment, a numeric vector containing GSD values for
+#'   each covariate. For an `"m_lbcnet"` object, a list with two data frames:
+#'   `versus_population`, the primary diagnostic, and `pairwise`, the secondary
+#'   diagnostic. Original treatment labels are retained.
 #'
 #' @details
 #' \strong{Definition of GSD}:
@@ -51,6 +57,14 @@
 #'
 #' Automatic Extraction from `lbc_net` Object if an `lbc_net` object is provided.
 #'
+#' For M-LBCNet, arm \eqn{t} uses weights
+#' \eqn{a_{it}=R_{it}/\pi_{it}} and the common ATE population uses
+#' \eqn{b_i=1}. Pairwise comparisons replace \eqn{b_i} with
+#' \eqn{a_{is}=R_{is}/\pi_{is}}. Both use the implemented binary
+#' weighted-variance convention (division by total weight), effective sample
+#' sizes \eqn{m=(\sum_i w_i)^2/\sum_i w_i^2}, and the pooled standardizer
+#' shown above. M-LBCNet GSD values are reported in absolute value.
+#'
 #' @examples
 #'
 #' # Example with manually provided inputs
@@ -73,6 +87,10 @@
 #' }
 #' @export
 gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ate_flag = 1, ...) {
+  if (!is.null(object) && inherits(object, "m_lbcnet")) {
+    return(.m_lbcnet_gsd(object))
+  }
+
   # Extract from `lbc_net` object if provided
   if (!is.null(object)) {
     if (!inherits(object, "lbc_net")) {
@@ -142,4 +160,109 @@ gsd <- function(object = NULL, Z = NULL, Tr = NULL, ps = NULL, wt = NULL, ate_fl
     return(compute_gsd(Z))  # Single covariate case (vector)
   }
   
+}
+
+
+.m_lbcnet_standardized_difference <- function(
+    Z, weights_1, weights_2, mass_floor = NULL, variance_floor = NULL,
+    invalid_value = NA_real_) {
+  Z <- as.matrix(Z)
+  mass_1 <- sum(weights_1)
+  mass_2 <- sum(weights_2)
+  squared_mass_1 <- sum(weights_1^2)
+  squared_mass_2 <- sum(weights_2^2)
+
+  if (!is.null(mass_floor)) {
+    valid <- all(is.finite(c(
+      mass_1, mass_2, squared_mass_1, squared_mass_2
+    ))) && mass_1 > mass_floor && mass_2 > mass_floor &&
+      squared_mass_1 > 0 && squared_mass_2 > 0
+    if (!valid) {
+      return(stats::setNames(rep(invalid_value, ncol(Z)), colnames(Z)))
+    }
+  }
+
+  mean_1 <- colSums(sweep(Z, 1L, weights_1, `*`)) / mass_1
+  mean_2 <- colSums(sweep(Z, 1L, weights_2, `*`)) / mass_2
+  centered_1 <- sweep(Z, 2L, mean_1, `-`)
+  centered_2 <- sweep(Z, 2L, mean_2, `-`)
+  variance_1 <- colSums(sweep(centered_1^2, 1L, weights_1, `*`)) / mass_1
+  variance_2 <- colSums(sweep(centered_2^2, 1L, weights_2, `*`)) / mass_2
+  if (!is.null(variance_floor)) {
+    variance_1 <- pmax(variance_1, variance_floor)
+    variance_2 <- pmax(variance_2, variance_floor)
+  }
+
+  ess_1 <- mass_1^2 / squared_mass_1
+  ess_2 <- mass_2^2 / squared_mass_2
+  if (!is.null(mass_floor) && !all(is.finite(c(ess_1, ess_2)))) {
+    return(stats::setNames(rep(invalid_value, ncol(Z)), colnames(Z)))
+  }
+  pooled_variance <- (
+    ess_1 * variance_1 + ess_2 * variance_2
+  ) / (ess_1 + ess_2)
+  values <- 100 * abs(mean_1 - mean_2) / sqrt(pooled_variance)
+  if (!is.null(mass_floor)) {
+    values[!is.finite(values)] <- invalid_value
+  }
+  stats::setNames(as.numeric(values), colnames(Z))
+}
+
+
+.m_lbcnet_gsd <- function(object) {
+  Z <- as.matrix(object$Z)
+  gps <- as.matrix(object$fitted.values)
+  treatment_code <- object$Tr_code
+  treatment_levels <- object$treatment_levels
+  n_treatments <- object$n_treatments
+  covariates <- colnames(Z)
+  population_weights <- rep(1, nrow(Z))
+
+  versus_population <- do.call(rbind, lapply(
+    seq_len(n_treatments),
+    function(treatment_index) {
+      treatment_weights <-
+        (treatment_code == treatment_index - 1L) /
+        gps[, treatment_index]
+      data.frame(
+        treatment = rep(treatment_levels[treatment_index], ncol(Z)),
+        covariate = covariates,
+        gsd = unname(.m_lbcnet_standardized_difference(
+          Z, treatment_weights, population_weights
+        )),
+        check.names = FALSE,
+        stringsAsFactors = FALSE
+      )
+    }
+  ))
+  rownames(versus_population) <- NULL
+
+  pairwise_rows <- list()
+  row_index <- 1L
+  for (treatment_1 in seq_len(n_treatments - 1L)) {
+    weights_1 <-
+      (treatment_code == treatment_1 - 1L) / gps[, treatment_1]
+    for (treatment_2 in seq.int(treatment_1 + 1L, n_treatments)) {
+      weights_2 <-
+        (treatment_code == treatment_2 - 1L) / gps[, treatment_2]
+      pairwise_rows[[row_index]] <- data.frame(
+        treatment_1 = rep(treatment_levels[treatment_1], ncol(Z)),
+        treatment_2 = rep(treatment_levels[treatment_2], ncol(Z)),
+        covariate = covariates,
+        gsd = unname(.m_lbcnet_standardized_difference(
+          Z, weights_1, weights_2
+        )),
+        check.names = FALSE,
+        stringsAsFactors = FALSE
+      )
+      row_index <- row_index + 1L
+    }
+  }
+  pairwise <- do.call(rbind, pairwise_rows)
+  rownames(pairwise) <- NULL
+
+  list(
+    versus_population = versus_population,
+    pairwise = pairwise
+  )
 }

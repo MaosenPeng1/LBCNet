@@ -17,12 +17,16 @@ The requested component(s), based on the specific method for the object's class.
 \description{
 This is a generic function used to extract components from different object types.
 The function dispatches the appropriate method based on the class of `object`, ensuring
-users can retrieve key model outputs from supported objects such as `"lbc_net"` and `lsd`.
+users can retrieve key model outputs from supported objects such as
+`"lbc_net"`, `"m_lbcnet"`, `"lbc_net_surv"`, and `"lsd"`.
 }
 \details{
 This function uses S3 method dispatching to call the appropriate method based on the
 object type. For example:
-If `object` is of class `"lbc_net"` or `"lsd"`, see \code{\link{getLBC.lbc_net}} and \code{\link{getLBC.lsd}} for details.
+If `object` is of class `"lbc_net"`, `"m_lbcnet"`,
+`"lbc_net_surv"`, or `"lsd"`, see \code{\link{getLBC.lbc_net}},
+\code{\link{getLBC.m_lbcnet}}, \code{\link{getLBC.lbc_net_surv}}, and
+\code{\link{getLBC.lsd}} for details.
 Additional object types may be supported in the future.
 }
 \examples{

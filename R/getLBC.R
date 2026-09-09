@@ -2,7 +2,8 @@
 #'
 #' @description This is a generic function used to extract components from different object types.
 #' The function dispatches the appropriate method based on the class of `object`, ensuring
-#' users can retrieve key model outputs from supported objects such as `"lbc_net"` and `lsd`.
+#' users can retrieve key model outputs from supported objects such as
+#' `"lbc_net"`, `"m_lbcnet"`, `"lbc_net_surv"`, and `"lsd"`.
 #'
 #' @param object An object from which to extract components.
 #' @param name The name(s) of the component(s) to extract.
@@ -11,7 +12,10 @@
 #' @details
 #' This function uses S3 method dispatching to call the appropriate method based on the
 #' object type. For example:
-#' If `object` is of class `"lbc_net"` or `"lsd"`, see \code{\link{getLBC.lbc_net}} and \code{\link{getLBC.lsd}} for details.
+#' If `object` is of class `"lbc_net"`, `"m_lbcnet"`,
+#' `"lbc_net_surv"`, or `"lsd"`, see \code{\link{getLBC.lbc_net}},
+#' \code{\link{getLBC.m_lbcnet}}, \code{\link{getLBC.lbc_net_surv}}, and
+#' \code{\link{getLBC.lsd}} for details.
 #' Additional object types may be supported in the future.
 #'
 #' @examples
@@ -121,6 +125,59 @@ getLBC.lbc_net <- function(object, name = "fitted.values") {
   } else {
     return(result)
   }
+}
+
+#' Extract Components from an M-LBCNet Object
+#'
+#' @description Retrieves stored components from an object returned by
+#'   \code{\link{m_lbcnet}} through the existing \code{getLBC()} generic.
+#'
+#' @param object An object of class \code{"m_lbcnet"}.
+#' @param name Character vector naming components, or \code{"ALL"}. Supported
+#'   components are \code{fitted.values}, \code{weights}, \code{loss},
+#'   \code{lsd_train}, \code{treatment_levels}, \code{n_treatments},
+#'   \code{parameters}, \code{stopping_criteria}, \code{estimand}, \code{seed},
+#'   \code{call}, \code{formula}, \code{Z}, \code{Tr}, \code{Tr_code},
+#'   \code{ck}, \code{h}, \code{K}, \code{rho}, \code{kernel},
+#'   \code{ps_preliminary}, \code{bandwidth_pilot_method}, \code{Y},
+#'   \code{means}, \code{covariance}, \code{pairwise_ate},
+#'   \code{influence_functions}, \code{lsd_values}, \code{tensor_shapes}, and
+#'   \code{inference_diagnostics}.
+#' @return A component, a named list of components, or the complete object.
+#' @details Global and local balance tables are derived diagnostics rather than
+#'   stored fit components. Obtain them on demand with \code{gsd(object)} and
+#'   \code{lsd(object)}.
+#' @examples
+#' \dontrun{
+#' fit <- m_lbcnet(Z = Z, Tr = Tr, max_epochs = 50)
+#' getLBC(fit, "fitted.values")
+#' getLBC(fit, c("treatment_levels", "h"))
+#' }
+#' @export
+getLBC.m_lbcnet <- function(object, name = "fitted.values") {
+  if (!inherits(object, "m_lbcnet")) {
+    stop("Error: 'object' must be of class 'm_lbcnet'.")
+  }
+  if (!is.character(name) || length(name) == 0L || anyNA(name) ||
+      any(!nzchar(name))) {
+    stop("Error: 'name' must be a non-empty character vector.")
+  }
+  valid <- c(
+    "fitted.values", "weights", "loss", "lsd_train", "treatment_levels",
+    "n_treatments", "parameters", "stopping_criteria", "estimand", "seed",
+    "call", "formula", "Z", "Tr", "Tr_code", "ck", "h", "K", "rho",
+    "kernel", "ps_preliminary", "bandwidth_pilot_method", "Y", "means",
+    "covariance", "pairwise_ate", "influence_functions", "lsd_values",
+    "tensor_shapes", "inference_diagnostics"
+  )
+  if (identical(name, "ALL")) return(object)
+  invalid <- setdiff(name, valid)
+  if (length(invalid)) {
+    stop("Invalid component name(s): ", paste(invalid, collapse = ", "),
+         ". Use one of: ", paste(valid, collapse = ", "))
+  }
+  result <- object[name]
+  if (length(name) == 1L) result[[1L]] else result
 }
 
 #' Extract Components from an lsd Object

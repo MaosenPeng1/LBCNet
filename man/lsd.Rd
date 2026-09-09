@@ -19,7 +19,10 @@ lsd(
 )
 }
 \arguments{
-\item{object}{An optional object of class `lbc_net`. If provided, extracts `Z`, `Tr`, `ps`, `ck`, `h`, and `kernel`.}
+\item{object}{An optional object of class `lbc_net` or `m_lbcnet`. For a
+binary fit, extracts `Z`, `Tr`, `ps`, `ck`, `h`, and `kernel`. For an
+M-LBCNet fit, computes treatment-versus-population and pairwise local
+balance diagnostics from the joint generalized propensity scores.}
 
 \item{Z}{A matrix or data frame of covariates. Required if `object` is not provided.}
 
@@ -45,15 +48,23 @@ units are downweighted based on their propensity scores. See Details in \code{\l
 \item{...}{Additional arguments passed to the specific method.}
 }
 \value{
-An object `lsd` containing LSD values (\%) for each covariate, which includes:
+For a binary treatment, an object `lsd` containing LSD values (\%)
+for each covariate, which includes:
   \itemize{
         \item `LSD`: A matrix of LSD values for each covariate at each `ck`.
         \item `LSD_mean`: The mean absolute LSD value across all covariates.
         \item `LSD_max`: The maximum absolute LSD value.
       }
-Other model components (e.g., `Z`, `Tr`) are accessible via `$`
-or the recommended \code{\link[=getLBC.lsd]{getLBC}} function. While direct access (e.g., `fit$fitted.values`)
-is possible, using `getLBC(fit, "LSD")` is recommended for stability and future-proofing.
+For an `m_lbcnet` object, a list with `versus_population` and `pairwise`
+data frames. The former has columns `treatment`, `center`, `covariate`, and
+`lsd`; the latter has `localizing_treatment`, `treatment_1`, `treatment_2`,
+`center`, `covariate`, and `lsd`. Original treatment labels are retained.
+For the binary `lsd` object, other model components (e.g., `Z`, `Tr`) are
+accessible via `$` or the recommended
+\code{\link[=getLBC.lsd]{getLBC}} method. While direct access is possible,
+using `getLBC(fit, "LSD")` is recommended for stability and
+future-proofing. The M-LBCNet result is the documented two-element list and
+is accessed directly.
 }
 \description{
 Computes the Local Standardized Mean Difference (LSD) for assessing local balance in causal inference.
@@ -66,6 +77,23 @@ The formula for LSD follows the same structure as the Global Standardized Mean D
 but the weights `W_i` are replaced with `W'_i`, Local Inverse Probability Weight (LIPW). LSD is expressed as a percentage in absolute value.
 
 Like GSD, LSD can be used for assessing balance in covariates, but LSD is specific to propensity score-based methods.
+
+For M-LBCNet, the primary diagnostic compares each treatment with the
+common local ATE population. At center \eqn{c_k}, treatment \eqn{t} uses
+\eqn{a_{itk}=\omega(c_k,\pi_{it};h_{tk})R_{it}/\pi_{it}} and the population
+uses \eqn{b_{itk}=\omega(c_k,\pi_{it};h_{tk})}. The weighted means,
+total-weight variances, effective sample sizes, and pooled standardizer use
+the same implemented functional form as binary LSD. Pairwise M-LBCNet LSD
+is secondary: for localizing treatment \eqn{r}, both compared treatments
+use the same \eqn{\omega(c_k,\pi_{ir};h_{rk})} neighborhood. Only
+treatment-versus-population LSD is used for M-LBCNet training diagnostics
+and early stopping; pairwise LSD is never part of the stopping rule.
+
+M-LBCNet uses a local-mass floor of \eqn{10^{-8}}, floors each weighted
+variance at \eqn{10^{-8}}, and assigns \eqn{10^{8}} to an unsupported or
+otherwise non-finite neighborhood. Thus an empty compact-kernel
+neighborhood cannot appear perfectly balanced. Only genuine columns of the
+fitted raw covariate matrix are reported; the training intercept is omitted.
 }
 \examples{
 # Example with manually provided inputs

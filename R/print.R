@@ -88,6 +88,93 @@ print.lbc_net <- function(x, ...) {
   cat("Use summary(object) for a full model summary.\n")
 }
 
+#' Print an M-LBCNet Model
+#'
+#' @description Prints treatment sizes, joint-GPS training diagnostics,
+#'   hyperparameters, stopping status, and outcome results when present. The
+#'   reported training LSD is the primary treatment-versus-population
+#'   diagnostic; full balance tables are available from \code{gsd(x)} and
+#'   \code{lsd(x)}.
+#' @param x An object of class \code{"m_lbcnet"}.
+#' @param ... Additional arguments (currently ignored).
+#' @return \code{x}, invisibly.
+#' @examples
+#' \dontrun{
+#' fit <- m_lbcnet(Z = Z, Tr = Tr, max_epochs = 50)
+#' print(fit)
+#' }
+#' @export
+print.m_lbcnet <- function(x, ...) {
+  if (!inherits(x, "m_lbcnet")) {
+    stop("Error: object must be of class 'm_lbcnet'.")
+  }
+  group_sizes <- tabulate(x$Tr_code + 1L, nbins = x$n_treatments)
+  names(group_sizes) <- as.character(x$treatment_levels)
+
+  cat("M-LBCNet Model\n")
+  cat("==============\n\n")
+  cat("Call:\n")
+  print(x$call)
+  cat("\nSample Size:", nrow(x$Z), "\n")
+  cat("Treatment Groups:", x$n_treatments, "\n\n")
+  cat("Group Sizes:\n")
+  for (index in seq_along(group_sizes)) {
+    cat(" ", names(group_sizes)[index], ": ", group_sizes[index], "\n",
+        sep = "")
+  }
+
+  cat("\n--- Training Results ---\n")
+  cat("Final Loss:", format(x$loss, digits = 6), "\n")
+  cat(
+    "Treatment-vs-Population Max LSD:",
+    sprintf("%.2f%%", x$lsd_train$lsd_max), "\n"
+  )
+  cat(
+    "Treatment-vs-Population Mean LSD:",
+    sprintf("%.2f%%", x$lsd_train$lsd_mean), "\n"
+  )
+
+  cat("\n--- Model Hyperparameters ---\n")
+  cat("K:", x$K, "\n")
+  cat("Kernel:", x$kernel, "\n")
+  cat("Bandwidth Pilot:", x$bandwidth_pilot_method, "\n")
+  cat("Hidden Layers:", x$parameters$num_hidden_layers, "\n")
+  cat("Hidden Units:", x$parameters$hidden_dim, "\n")
+  cat("Learning rates: VAE =", x$parameters$vae_lr,
+      ", M-LBCNet =", x$parameters$lr, "\n")
+  cat(sprintf("Weight Decay: %.1e\n", x$parameters$weight_decay))
+  cat("Balance Lambda:", x$parameters$balance_lambda, "\n")
+  cat("Epsilon:", x$parameters$epsilon, "\n")
+
+  cat("\n--- Stopping Information ---\n")
+  cat(
+    "Epochs Run:", x$stopping_criteria$epochs_run,
+    "of", x$stopping_criteria$max_epochs, "\n"
+  )
+  criterion_achieved <- isTRUE(x$stopping_criteria$early_stopping)
+  cat(
+    "LSD Criterion Achieved:",
+    if (criterion_achieved) "Yes" else "No", "\n"
+  )
+  cat(
+    "LSD Threshold:", sprintf("%.2f%%", x$stopping_criteria$lsd_threshold),
+    "| Rolling Window:", x$stopping_criteria$rolling_window, "\n"
+  )
+  if (!criterion_achieved) {
+    cat("Stopping Status: Maximum epochs reached; LSD criterion not achieved.\n")
+  }
+
+  if (!is.null(x$Y)) {
+    cat("\n--- Treatment-Specific Marginal Means ---\n")
+    print(x$means, row.names = FALSE)
+    cat("\n--- Pairwise ATEs ---\n")
+    print(x$pairwise_ate, row.names = FALSE)
+  } else {
+    cat("\nOnly the joint GPS model was fitted; no outcome was supplied.\n")
+  }
+  invisible(x)
+}
+
 #' Print Basic Information of an lsd Object
 #'
 #' @description Provides a concise summary of an lsd object for local balance (LSD).

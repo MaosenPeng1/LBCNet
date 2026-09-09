@@ -213,6 +213,188 @@ summary.lbc_net <- function(object, Y = NULL, type = "ATE", ...) {
 
 }
 
+
+.m_lbcnet_metric_summary <- function(data, value_name, group_names) {
+  values <- data[[value_name]]
+  groups <- unique(data[group_names])
+  group_max <- numeric(nrow(groups))
+  group_mean <- numeric(nrow(groups))
+  for (group_index in seq_len(nrow(groups))) {
+    selected <- rep(TRUE, nrow(data))
+    for (group_name in group_names) {
+      selected <- selected &
+        data[[group_name]] == groups[[group_name]][group_index]
+    }
+    group_max[group_index] <- max(values[selected])
+    group_mean[group_index] <- mean(values[selected])
+  }
+  groups$max <- group_max
+  groups$mean <- group_mean
+  list(
+    max = max(values),
+    mean = mean(values),
+    by_group = groups
+  )
+}
+
+
+#' Summarize an M-LBCNet Model
+#'
+#' @description Provides a structured M-LBCNet summary with sample and training
+#'   information, generalized propensity-score and observed-weight summaries,
+#'   outcome inference when available, and concise global and local balance
+#'   summaries.
+#' @param object An object of class \code{"m_lbcnet"}.
+#' @param ... Additional arguments (currently ignored).
+#' @return Invisibly returns a structured list. The list retains the fitted
+#'   model summaries and contains the complete derived diagnostics in
+#'   \code{gsd} and \code{lsd}; only concise maxima, means, and grouped
+#'   summaries are printed.
+#' @details \code{summary.m_lbcnet()} computes \code{gsd(object)} and
+#'   \code{lsd(object)} on demand. In each diagnostic, \code{versus_population}
+#'   is primary because it follows the M-LBCNet treatment-versus-population
+#'   balance targets. \code{pairwise} is secondary. Pairwise LSD compares both
+#'   treatments inside one common neighborhood defined by the reported
+#'   localizing treatment's GPS component.
+#' @examples
+#' \dontrun{
+#' fit <- m_lbcnet(Z = Z, Tr = Tr, max_epochs = 50)
+#' out <- summary(fit)
+#' out$gsd$versus_population
+#' out$lsd$pairwise
+#' }
+#' @export
+summary.m_lbcnet <- function(object, ...) {
+  if (!inherits(object, "m_lbcnet")) {
+    stop("Error: 'object' must be an object of class 'm_lbcnet'.")
+  }
+  group_sizes <- tabulate(
+    object$Tr_code + 1L, nbins = object$n_treatments
+  )
+  names(group_sizes) <- as.character(object$treatment_levels)
+  gps_summary <- t(vapply(
+    seq_len(object$n_treatments),
+    function(index) {
+      values <- object$fitted.values[, index]
+      c(
+        min = min(values),
+        Q1 = unname(stats::quantile(values, 0.25)),
+        median = stats::median(values),
+        mean = mean(values),
+        Q3 = unname(stats::quantile(values, 0.75)),
+        max = max(values)
+      )
+    },
+    numeric(6)
+  ))
+  rownames(gps_summary) <- as.character(object$treatment_levels)
+  weight_summary <- summary(object$weights)
+
+  gsd_result <- gsd(object)
+  lsd_result <- lsd(object)
+  global_balance <- list(
+    versus_population = .m_lbcnet_metric_summary(
+      gsd_result$versus_population, "gsd", "treatment"
+    ),
+    pairwise = .m_lbcnet_metric_summary(
+      gsd_result$pairwise, "gsd", c("treatment_1", "treatment_2")
+    )
+  )
+  local_balance <- list(
+    versus_population = .m_lbcnet_metric_summary(
+      lsd_result$versus_population, "lsd", "treatment"
+    ),
+    pairwise = .m_lbcnet_metric_summary(
+      lsd_result$pairwise, "lsd",
+      c("localizing_treatment", "treatment_1", "treatment_2")
+    )
+  )
+
+  result <- list(
+    call = object$call,
+    sample_size = nrow(object$Z),
+    covariate_count = ncol(object$Z),
+    treatment_count = object$n_treatments,
+    treatment_group_sizes = group_sizes,
+    bandwidth_pilot_method = object$bandwidth_pilot_method,
+    loss = object$loss,
+    max_lsd = object$lsd_train$lsd_max,
+    mean_lsd = object$lsd_train$lsd_mean,
+    lsd_by_treatment = object$lsd_train$lsd_by_treatment,
+    gps_summary = gps_summary,
+    observed_ipw_summary = weight_summary,
+    means = object$means,
+    pairwise_ate = object$pairwise_ate,
+    covariance = object$covariance,
+    global_balance = global_balance,
+    local_balance = local_balance,
+    gsd = gsd_result,
+    lsd = lsd_result
+  )
+
+  cat("M-LBCNet Model Summary\n")
+  cat("======================\n\n")
+  cat("Call:\n")
+  print(result$call)
+  cat("\nSample Size:", result$sample_size, "\n")
+  cat("Number of Covariates:", result$covariate_count, "\n")
+  cat("Number of Treatments:", result$treatment_count, "\n\n")
+  cat("Bandwidth Pilot:", result$bandwidth_pilot_method, "\n\n")
+  cat("Treatment Group Sizes:\n")
+  print(result$treatment_group_sizes)
+  cat("\nTraining Loss:", format(result$loss, digits = 6), "\n")
+  cat(
+    "Training Treatment-vs-Population Max LSD:",
+    sprintf("%.4f", result$max_lsd), "\n"
+  )
+  cat(
+    "Training Treatment-vs-Population Mean LSD:",
+    sprintf("%.4f", result$mean_lsd), "\n"
+  )
+
+  cat("\nGlobal Balance:\n")
+  cat(sprintf(
+    " Treatment vs population: max GSD = %.4f, mean GSD = %.4f\n",
+    result$global_balance$versus_population$max,
+    result$global_balance$versus_population$mean
+  ))
+  cat(sprintf(
+    " Pairwise: max GSD = %.4f, mean GSD = %.4f\n",
+    result$global_balance$pairwise$max,
+    result$global_balance$pairwise$mean
+  ))
+  cat("\nGlobal Treatment-vs-Population GSD by Treatment:\n")
+  print(result$global_balance$versus_population$by_group, row.names = FALSE)
+
+  cat("\nLocal Balance:\n")
+  cat(sprintf(
+    " Treatment vs population: max LSD = %.4f, mean LSD = %.4f\n",
+    result$local_balance$versus_population$max,
+    result$local_balance$versus_population$mean
+  ))
+  cat(sprintf(
+    " Pairwise: max LSD = %.4f, mean LSD = %.4f\n",
+    result$local_balance$pairwise$max,
+    result$local_balance$pairwise$mean
+  ))
+  cat("\nLocal Treatment-vs-Population LSD by Treatment:\n")
+  print(result$local_balance$versus_population$by_group, row.names = FALSE)
+
+  cat("\nGPS Summary by Treatment:\n")
+  print(result$gps_summary)
+  cat("\nObserved ATE IPW Summary:\n")
+  print(result$observed_ipw_summary)
+  if (!is.null(object$Y)) {
+    cat("\nTreatment-Specific Marginal Means:\n")
+    print(result$means, row.names = FALSE)
+    cat("\nPairwise ATEs:\n")
+    print(result$pairwise_ate, row.names = FALSE)
+  } else {
+    cat("\nNo outcome supplied; means and pairwise ATEs were not estimated.\n")
+  }
+  invisible(result)
+}
+
 #' Summary of an lsd Object
 #'
 #' @description Provides a structured summary of an `lsd` object.
