@@ -182,6 +182,17 @@
 #'         \item `weights`: Inverse probability weights (IPW).
 #'       }
 #'
+#' When `Y` is supplied with `estimand = "ATE"`, the object also contains
+#' `means` (treatment-specific estimates, standard errors and 95\% confidence
+#' intervals), `covariance` (the full influence-function-based joint covariance
+#' matrix of those estimates), `pairwise_ate`, `influence_functions`, and
+#' `hypothesis_test`, produced by \code{\link{hypo_test}}. Treatment order is
+#' `1`, then `0`, so the pairwise contrast retains the existing treated-minus-
+#' control direction. The existing `effect`, `se`, and `ci` fields are retained;
+#' `pairwise_ate` uses those same values and their existing 1.96 CI multiplier.
+#' Hypothesis tests use the full joint covariance and the normal quantile
+#' corresponding to their requested confidence level.
+#'
 #' Other model components (e.g., `losses`, `parameters`, `Z`, `Tr`) are accessible via `$`
 #' or the recommended \code{\link[=getLBC.lbc_net]{getLBC}} function. While direct access (e.g., `fit$fitted.values`)
 #' is possible, using `getLBC(fit, "fitted.values")` is recommended for stability and future-proofing.
@@ -585,9 +596,39 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
     out$effect <- result$effect
     out$se <- result$se
     out$ci <- c(lower = result$ci_lower, upper = result$ci_upper)
+    if (estimand == "ATE") {
+      treatment_levels <- c(1, 0)
+      treatment_names <- as.character(treatment_levels)
+      estimates <- as.numeric(result$means)
+      se_means <- as.numeric(result$se_means)
+      out$means <- data.frame(
+        treatment = treatment_levels, estimate = estimates, se = se_means,
+        ci_lower = estimates - 1.96 * se_means,
+        ci_upper = estimates + 1.96 * se_means,
+        check.names = FALSE, stringsAsFactors = FALSE
+      )
+      covariance <- as.matrix(result$covariance_means)
+      storage.mode(covariance) <- "double"
+      dimnames(covariance) <- list(treatment_names, treatment_names)
+      out$covariance <- covariance
+      out$pairwise_ate <- data.frame(
+        treatment_1 = 1, treatment_2 = 0,
+        estimate = out$effect, se = out$se,
+        ci_lower = unname(out$ci["lower"]),
+        ci_upper = unname(out$ci["upper"]),
+        check.names = FALSE, stringsAsFactors = FALSE
+      )
+      influence <- as.matrix(result$influence_functions)
+      storage.mode(influence) <- "double"
+      colnames(influence) <- treatment_names
+      out$influence_functions <- influence
+    }
   }
   
   class(out) <- "lbc_net"  # Assign class to make it compatible with S3 methods
+  if (!is.null(Y) && estimand == "ATE") {
+    out <- .attach_ate_hypothesis_test(out)
+  }
   return(out)
   
 }

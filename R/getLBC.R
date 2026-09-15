@@ -76,6 +76,11 @@ getLBC <- function(object, name) {
 #'     \item{"effect"}{Estimated causal effect (if computed).}
 #'     \item{"se"}{Estimated standard error (if computed).}
 #'     \item{"ci"}{Confidence interval for the estimated effect.}
+#'     \item{"means"}{ATE marginal treatment means in order 1, 0, with SEs and intervals.}
+#'     \item{"covariance"}{Full joint influence-function covariance of the ATE means.}
+#'     \item{"pairwise_ate"}{Binary ATE contrast retaining the stored effect, SE, and interval.}
+#'     \item{"influence_functions"}{Joint influence-function columns for the ATE means.}
+#'     \item{"hypothesis_test"}{Global and pairwise ATE tests from \code{\link{hypo_test}}.}
 #'   }
 #'
 #' @return The requested component(s) from the `lbc_net` object. Default returns "fitted.values".
@@ -102,7 +107,8 @@ getLBC.lbc_net <- function(object, name = "fitted.values") {
   # Define valid components
   valid_components <- c("fitted.values", "weights", "loss", "lsd_train", "parameters", "estimand",
                         "stopping_criteria", "ate_flag", "seed", "call", "formula", "Z",
-                        "Tr", "ck", "h", "K", "rho", "kernel", "ps_logistic", "effect", "se", "ci")
+                        "Tr", "ck", "h", "K", "rho", "kernel", "ps_logistic", "effect", "se", "ci",
+                        "means", "covariance", "pairwise_ate", "influence_functions", "hypothesis_test")
 
   # If "ALL" is requested, return the entire object as a named list
   if (identical(name, "ALL")) {
@@ -140,7 +146,7 @@ getLBC.lbc_net <- function(object, name = "fitted.values") {
 #'   \code{call}, \code{formula}, \code{Z}, \code{Tr}, \code{Tr_code},
 #'   \code{ck}, \code{h}, \code{K}, \code{rho}, \code{kernel},
 #'   \code{ps_preliminary}, \code{bandwidth_pilot_method}, \code{Y},
-#'   \code{means}, \code{covariance}, \code{pairwise_ate},
+#'   \code{means}, \code{covariance}, \code{pairwise_ate}, \code{hypothesis_test},
 #'   \code{influence_functions}, \code{lsd_values}, \code{tensor_shapes}, and
 #'   \code{inference_diagnostics}.
 #' @return A component, a named list of components, or the complete object.
@@ -167,7 +173,7 @@ getLBC.m_lbcnet <- function(object, name = "fitted.values") {
     "n_treatments", "parameters", "stopping_criteria", "estimand", "seed",
     "call", "formula", "Z", "Tr", "Tr_code", "ck", "h", "K", "rho",
     "kernel", "ps_preliminary", "bandwidth_pilot_method", "Y", "means",
-    "covariance", "pairwise_ate", "influence_functions", "lsd_values",
+    "covariance", "pairwise_ate", "hypothesis_test", "influence_functions", "lsd_values",
     "tensor_shapes", "inference_diagnostics"
   )
   if (identical(name, "ALL")) return(object)

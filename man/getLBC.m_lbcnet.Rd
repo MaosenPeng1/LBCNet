@@ -16,7 +16,7 @@ components are \code{fitted.values}, \code{weights}, \code{loss},
 \code{call}, \code{formula}, \code{Z}, \code{Tr}, \code{Tr_code},
 \code{ck}, \code{h}, \code{K}, \code{rho}, \code{kernel},
 \code{ps_preliminary}, \code{bandwidth_pilot_method}, \code{Y},
-\code{means}, \code{covariance}, \code{pairwise_ate},
+\code{means}, \code{covariance}, \code{pairwise_ate}, \code{hypothesis_test},
 \code{influence_functions}, \code{lsd_values}, \code{tensor_shapes}, and
 \code{inference_diagnostics}.}
 }

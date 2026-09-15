@@ -34,6 +34,8 @@
 #'   \item{\code{treatment_effect}}{Estimated treatment effect and, when available,
 #'     its standard error and confidence interval.}
 #'   \item{\code{gsd}}{GSD after weighting.}
+#'   \item{\code{hypothesis_test}}{Stored global and pairwise ATE hypothesis
+#'     tests, when this component is present in the fitted object.}
 #' }
 #'
 #' @details
@@ -46,6 +48,10 @@
 #' If no treatment effect is stored and `Y` is supplied, \code{est_effect}
 #' is used to compute a point estimate only (no variance). If neither is
 #' available, the summary focuses on balance diagnostics.
+#'
+#' Stored \code{hypothesis_test} results from \code{\link{hypo_test}} are
+#' printed and included in the returned list without recomputation. If the
+#' stored component is \code{NULL}, it is retained without printing tests.
 #'
 #' It is designed for estimating causal effects in settings with continuous or
 #' binary outcomes. For survival outcomes, users should apply appropriate
@@ -209,6 +215,17 @@ summary.lbc_net <- function(object, Y = NULL, type = "ATE", ...) {
     gsd = gsd_values_after
   )
   
+  if ("hypothesis_test" %in% names(object)) {
+    summary_list["hypothesis_test"] <- object["hypothesis_test"]
+  }
+  if (!is.null(summary_list$hypothesis_test)) {
+    cat("\n--- ATE Hypothesis Tests ---\n")
+    cat("Global Wald Test:\n")
+    print(summary_list$hypothesis_test$global, row.names = FALSE)
+    cat("\nPairwise Tests:\n")
+    print(summary_list$hypothesis_test$pairwise, row.names = FALSE)
+  }
+
   invisible(summary_list)
 
 }
@@ -249,13 +266,18 @@ summary.lbc_net <- function(object, Y = NULL, type = "ATE", ...) {
 #' @return Invisibly returns a structured list. The list retains the fitted
 #'   model summaries and contains the complete derived diagnostics in
 #'   \code{gsd} and \code{lsd}; only concise maxima, means, and grouped
-#'   summaries are printed.
+#'   balance summaries are printed. The stored \code{hypothesis_test}
+#'   component is also included when present in the fitted object.
 #' @details \code{summary.m_lbcnet()} computes \code{gsd(object)} and
 #'   \code{lsd(object)} on demand. In each diagnostic, \code{versus_population}
 #'   is primary because it follows the M-LBCNet treatment-versus-population
 #'   balance targets. \code{pairwise} is secondary. Pairwise LSD compares both
 #'   treatments inside one common neighborhood defined by the reported
 #'   localizing treatment's GPS component.
+#'
+#'   Stored global and pairwise ATE \code{hypothesis_test} results from
+#'   \code{\link{hypo_test}} are printed without recomputation. If the stored
+#'   component is \code{NULL}, it is retained without printing tests.
 #' @examples
 #' \dontrun{
 #' fit <- m_lbcnet(Z = Z, Tr = Tr, max_epochs = 50)
@@ -391,6 +413,16 @@ summary.m_lbcnet <- function(object, ...) {
     print(result$pairwise_ate, row.names = FALSE)
   } else {
     cat("\nNo outcome supplied; means and pairwise ATEs were not estimated.\n")
+  }
+  if ("hypothesis_test" %in% names(object)) {
+    result["hypothesis_test"] <- object["hypothesis_test"]
+  }
+  if (!is.null(result$hypothesis_test)) {
+    cat("\n--- ATE Hypothesis Tests ---\n")
+    cat("Global Wald Test:\n")
+    print(result$hypothesis_test$global, row.names = FALSE)
+    cat("\nPairwise Tests:\n")
+    print(result$hypothesis_test$pairwise, row.names = FALSE)
   }
   invisible(result)
 }

@@ -63,7 +63,10 @@ An S3 object of class \code{"m_lbcnet"}. The
   for adaptive selection and is \code{NULL} when \code{h} was supplied. With
   an outcome the object also includes \code{means}, \code{covariance},
   \code{pairwise_ate}, and, when variance is enabled,
-  \code{influence_functions}.
+  \code{influence_functions} and \code{hypothesis_test}. The latter is
+  produced by \code{\link{hypo_test}} using the full joint covariance and
+  contains global equality and pairwise ATE tests. It is not computed when
+  \code{compute_variance = FALSE}.
 }
 \description{
 Fits LBCNet for a categorical treatment with three or more

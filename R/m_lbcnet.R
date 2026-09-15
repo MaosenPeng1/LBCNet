@@ -75,7 +75,10 @@
 #'   for adaptive selection and is \code{NULL} when \code{h} was supplied. With
 #'   an outcome the object also includes \code{means}, \code{covariance},
 #'   \code{pairwise_ate}, and, when variance is enabled,
-#'   \code{influence_functions}.
+#'   \code{influence_functions} and \code{hypothesis_test}. The latter is
+#'   produced by \code{\link{hypo_test}} using the full joint covariance and
+#'   contains global equality and pairwise ATE tests. It is not computed when
+#'   \code{compute_variance = FALSE}.
 #'
 #' @examples
 #' \dontrun{
@@ -338,6 +341,9 @@ m_lbcnet <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   }
 
   class(out) <- "m_lbcnet"
+  if (!is.null(Y) && isTRUE(compute_variance)) {
+    out <- .attach_ate_hypothesis_test(out)
+  }
   out
 }
 

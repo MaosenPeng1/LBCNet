@@ -15,7 +15,8 @@
 Invisibly returns a structured list. The list retains the fitted
   model summaries and contains the complete derived diagnostics in
   \code{gsd} and \code{lsd}; only concise maxima, means, and grouped
-  summaries are printed.
+  balance summaries are printed. The stored \code{hypothesis_test}
+  component is also included when present in the fitted object.
 }
 \description{
 Provides a structured M-LBCNet summary with sample and training
@@ -30,6 +31,10 @@ Provides a structured M-LBCNet summary with sample and training
   balance targets. \code{pairwise} is secondary. Pairwise LSD compares both
   treatments inside one common neighborhood defined by the reported
   localizing treatment's GPS component.
+
+  Stored global and pairwise ATE \code{hypothesis_test} results from
+  \code{\link{hypo_test}} are printed without recomputation. If the stored
+  component is \code{NULL}, it is retained without printing tests.
 }
 \examples{
 \dontrun{

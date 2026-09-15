@@ -38,6 +38,8 @@ A list containing:
   \item{\code{treatment_effect}}{Estimated treatment effect and, when available,
     its standard error and confidence interval.}
   \item{\code{gsd}}{GSD after weighting.}
+  \item{\code{hypothesis_test}}{Stored global and pairwise ATE hypothesis
+    tests, when this component is present in the fitted object.}
 }
 }
 \description{
@@ -55,6 +57,10 @@ error and 95\% confidence interval.
 If no treatment effect is stored and `Y` is supplied, \code{est_effect}
 is used to compute a point estimate only (no variance). If neither is
 available, the summary focuses on balance diagnostics.
+
+Stored \code{hypothesis_test} results from \code{\link{hypo_test}} are
+printed and included in the returned list without recomputation. If the
+stored component is \code{NULL}, it is retained without printing tests.
 
 It is designed for estimating causal effects in settings with continuous or
 binary outcomes. For survival outcomes, users should apply appropriate

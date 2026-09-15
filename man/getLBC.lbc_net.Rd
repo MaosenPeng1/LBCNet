@@ -49,6 +49,11 @@
     \item{"effect"}{Estimated causal effect (if computed).}
     \item{"se"}{Estimated standard error (if computed).}
     \item{"ci"}{Confidence interval for the estimated effect.}
+    \item{"means"}{ATE marginal treatment means in order 1, 0, with SEs and intervals.}
+    \item{"covariance"}{Full joint influence-function covariance of the ATE means.}
+    \item{"pairwise_ate"}{Binary ATE contrast retaining the stored effect, SE, and interval.}
+    \item{"influence_functions"}{Joint influence-function columns for the ATE means.}
+    \item{"hypothesis_test"}{Global and pairwise ATE tests from \code{\link{hypo_test}}.}
   }}
 }
 \value{

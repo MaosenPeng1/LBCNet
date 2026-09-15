@@ -195,6 +195,17 @@ An object of class `"lbc_net"`, containing:
         \item `weights`: Inverse probability weights (IPW).
       }
 
+When `Y` is supplied with `estimand = "ATE"`, the object also contains
+`means` (treatment-specific estimates, standard errors and 95\% confidence
+intervals), `covariance` (the full influence-function-based joint covariance
+matrix of those estimates), `pairwise_ate`, `influence_functions`, and
+`hypothesis_test`, produced by \code{\link{hypo_test}}. Treatment order is
+`1`, then `0`, so the pairwise contrast retains the existing treated-minus-
+control direction. The existing `effect`, `se`, and `ci` fields are retained;
+`pairwise_ate` uses those same values and their existing 1.96 CI multiplier.
+Hypothesis tests use the full joint covariance and the normal quantile
+corresponding to their requested confidence level.
+
 Other model components (e.g., `losses`, `parameters`, `Z`, `Tr`) are accessible via `$`
 or the recommended \code{\link[=getLBC.lbc_net]{getLBC}} function. While direct access (e.g., `fit$fitted.values`)
 is possible, using `getLBC(fit, "fitted.values")` is recommended for stability and future-proofing.

@@ -55,7 +55,8 @@ for each covariate, which includes:
         \item `LSD_mean`: The mean absolute LSD value across all covariates.
         \item `LSD_max`: The maximum absolute LSD value.
       }
-For an `m_lbcnet` object, a list with `versus_population` and `pairwise`
+For an `m_lbcnet` object, a list of class `m_lbcnet_lsd` with
+`versus_population` and `pairwise`
 data frames. The former has columns `treatment`, `center`, `covariate`, and
 `lsd`; the latter has `localizing_treatment`, `treatment_1`, `treatment_2`,
 `center`, `covariate`, and `lsd`. Original treatment labels are retained.
@@ -64,7 +65,8 @@ accessible via `$` or the recommended
 \code{\link[=getLBC.lsd]{getLBC}} method. While direct access is possible,
 using `getLBC(fit, "LSD")` is recommended for stability and
 future-proofing. The M-LBCNet result is the documented two-element list and
-is accessed directly.
+is accessed directly. Use \code{\link[=plot.m_lbcnet_lsd]{plot}} for
+treatment-versus-population or pairwise diagnostic plots.
 }
 \description{
 Computes the Local Standardized Mean Difference (LSD) for assessing local balance in causal inference.
