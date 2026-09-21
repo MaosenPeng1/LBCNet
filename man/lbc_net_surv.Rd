@@ -143,7 +143,7 @@ recorded in the output object.}
   Controls how quickly the model updates its parameters during training. Default is `0.01`.}
 
     \item{`max_epochs`}{An integer specifying the maximum number of training epochs for LBC-Net.
-  Early stopping is applied based on `lsd_threshold` to prevent unnecessary training.
+  Training may stop earlier after numerical convergence of the objective.
   Default is `5000`.}
 
     \item{`lr`}{A numeric value specifying the initial learning rate for LBC-Net training using the Adam optimizer.
@@ -164,28 +164,33 @@ recorded in the output object.}
   similar results; larger values may induce overly conservative variance estimates.}
 
     \item{`epsilon`}{A small numeric value controlling the lower and upper bounds of the
-  estimated propensity scores. The default is `0.001`, ensuring scores remain within
-  \eqn{[\epsilon, 1 - \epsilon]} for numerical stability, particularly in cases of
-  poor overlap. Setting `epsilon = 0` reverts to the standard logit link function.
+  estimated propensity scores. The default is `0`, which uses the standard logit
+  link function. Positive values keep scores within \eqn{[\epsilon, 1 - \epsilon]}
+  for numerical stability, particularly in cases of poor overlap.
   See **Details** for more on its role in model stabilization.}
 
-    \item{`lsd_threshold`}{A numeric value defining the stopping criterion based on the Local Standardized mean Difference (LSD).
-  Training stops when the rolling average of the maximum local balance falls below this threshold.
-  The default `lsd_threshold = 2` balances efficiency and precision. In cases of poor overlap or small
-  sample sizes, a more relaxed threshold (e.g., `5\%` or `10\%`) may be used to allow more flexibility in training.}
+    \item{`lsd_threshold`}{Retained for backward compatibility. LSD remains a
+  post-fit local-balance diagnostic but no longer controls optimization stopping.}
 
-    \item{`rolling_window`}{An integer specifying the number of recent epochs used to compute the rolling average of
-  the maximum local balance. Default is `5`. The early stopping mechanism is triggered when the rolling average
-  of the maximum LSD over the most recent `rolling_window` epochs falls below `lsd_threshold`. Specifically,
-  at every 200-epoch step, the maximum local balance is calculated, and a rolling average over the last
-  `rolling_window` steps is updated. Training halts when this rolling average drops below `lsd_threshold`,
-  or when the predefined maximum epochs is reached, ensuring sufficient learning capacity.}
+    \item{`rolling_window`}{Retained for backward compatibility but no longer
+  used for optimization stopping.}
   }}
 
 \item{setup_lbcnet_args}{List. Optional arguments passed to \code{\link{setup_lbcnet}} for configuring the Python environment.
 If Python is not set up, `setup_lbcnet()` is automatically called using these parameters.
 Default is `list(envname = "r-lbcnet", create_if_missing = TRUE)`, meaning it will attempt to use the virtual environment `"r-lbcnet"`
 and create it if missing.}
+
+\item{max_epochs}{Maximum number of LBC-Net training epochs; default 5000.}
+
+\item{epsilon}{Lower and upper propensity-score bound. The default is 0,
+which uses the standard logit link function.}
+
+\item{lsd_threshold}{LSD threshold used by the survival fitter's existing
+rolling early-stopping rule.}
+
+\item{rolling_window}{Number of periodic LSD values used by the survival
+fitter's existing rolling early-stopping rule.}
 }
 \value{
 An object of class \code{"lbc_net_surv"} (and \code{"lbc_net"}), containing:

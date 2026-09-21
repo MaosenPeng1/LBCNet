@@ -352,8 +352,8 @@ def lbc_net_loss(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, bal
     V = ((2 * treatment - 1) / d).unsqueeze(1) * Z          # [N, p]
     B = w.transpose(0, 1) @ V                               # [K, p]
 
-    # Calibration moment: C_k = sum_i w_ik * (A_i - p_i) / {ck_k (1 - ck_k)}
-    C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (ck * (1 - ck))  # [K]
+    # Calibration moment: C_k = sum_i w_ik * (A_i - p_i) / sqrt{ck_k (1 - ck_k)}
+    C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / torch.sqrt(ck * (1 - ck))  # [K]
 
     # Stack [B_k, C_k] into D_k ∈ R^{p+1}
     C_scaled = balance_lambda * C
@@ -743,7 +743,7 @@ def lbc_net_moments(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, 
     phiB = w.unsqueeze(2) * V.unsqueeze(1)
 
     # φ_C (local calibration contributions), shape [N,K]
-    phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / (ck * (1 - ck))
+    phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / torch.sqrt(ck * (1 - ck))
     phiC_scaled = balance_lambda * phiC
 
     # Flatten: concatenate (K*p) + K = K*(p+1) components
@@ -779,6 +779,7 @@ def if_var(
     kernel_id=0,    # pass-through for omega_calculate
     balance_lambda=1.0,
     alpha = 0.01,
+    return_joint=False,
 ):
     """
     Influence-function-based SE for an IPW estimand with LBC-Net PS.
@@ -826,12 +827,21 @@ def if_var(
         Scaling factor for calibration moments in the loss.
     alpha : float, default 0.01
         Small ridge penalty factor for stabilizing the chain correction.
+    return_joint : bool, default False
+        For ATE inference, additionally return treatment means and their full
+        joint covariance, using the same moment Jacobian and ridge correction.
 
     Returns
     -------
     se : torch.Tensor (scalar)
         Estimated standard error of the IPW estimand.
+        If return_joint is True, return a dictionary containing this unchanged
+        SE, the means in treatment order (1, 0), their joint covariance and SEs,
+        and the corresponding per-observation influence functions.
     """
+
+    if return_joint and estimand != "ATE":
+        raise ValueError("Joint treatment-mean inference is available for ATE only.")
 
     # --- forward pass for propensity, no graph needed here ---
     p = model(Z).squeeze()           # [N], already sigmoid+clipped in your net
@@ -889,7 +899,7 @@ def if_var(
     g_params = torch.autograd.grad(
         outputs=Delta,
         inputs=params,
-        retain_graph=False,
+        retain_graph=return_joint,
         allow_unused=False,
     )
     gvec = _flatten_grads(g_params)          # [dθ]
@@ -916,6 +926,39 @@ def if_var(
     phi_centered = phi - phi.mean()
     var = (phi_centered.pow(2).sum() / (N - 1)) / N        # Var(φ)/n
     se = torch.sqrt(var)                                   # scalar tensor
+
+    if return_joint:
+        means = []
+        influence_columns = []
+        for arm_estimand in ("mu1", "mu0"):
+            arm_mean = ipw_est(Y, T, p_graph, estimand=arm_estimand)
+            arm_grads = torch.autograd.grad(
+                outputs=arm_mean,
+                inputs=params,
+                retain_graph=(arm_estimand == "mu1"),
+                allow_unused=False,
+            )
+            arm_gvec = _flatten_grads(arm_grads)
+            arm_g_proj = (Vh @ arm_gvec)[mask]
+            arm_b = V_kept @ (
+                arm_g_proj / (S_kept**2 + lambda_adaptive)
+            )
+            arm_chain = -(psi_s @ M_s @ arm_b)
+            arm_phi = plug_in_if(Y, T, p.detach(), estimand=arm_estimand)
+            means.append(arm_mean.detach())
+            influence_columns.append(arm_chain + arm_phi)
+
+        influence = torch.stack(influence_columns, dim=1)
+        centered = influence - influence.mean(dim=0, keepdim=True)
+        covariance = (centered.T @ centered) / float(N * (N - 1))
+        covariance = 0.5 * (covariance + covariance.T)
+        return {
+            "se": se,
+            "means": torch.stack(means),
+            "se_means": torch.sqrt(torch.diagonal(covariance)),
+            "covariance_means": covariance,
+            "influence_functions": influence,
+        }
 
     return se
 

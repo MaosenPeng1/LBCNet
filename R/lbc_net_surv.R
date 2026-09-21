@@ -57,6 +57,14 @@
 #'
 #' @inheritParams lbc_net
 #'
+#' @param max_epochs Maximum number of LBC-Net training epochs; default 5000.
+#' @param epsilon Lower and upper propensity-score bound. The default is 0,
+#'   which uses the standard logit link function.
+#' @param lsd_threshold LSD threshold used by the survival fitter's existing
+#'   rolling early-stopping rule.
+#' @param rolling_window Number of periodic LSD values used by the survival
+#'   fitter's existing rolling early-stopping rule.
+#'
 #' @param time Event or censoring time. This can be:
 #'   \itemize{
 #'     \item a numeric vector of length equal to the sample size, or
@@ -186,7 +194,7 @@ lbc_net_surv <- function(data = NULL, formula = NULL,
   weight_decay      <- if (!is.null(args$weight_decay)) args$weight_decay else 1e-5
   balance_lambda    <- if (!is.null(args$balance_lambda)) args$balance_lambda else 1.0
   alpha             <- if (!is.null(args$alpha)) args$alpha else 0.01
-  epsilon           <- if (!is.null(args$epsilon)) args$epsilon else 0.001
+  epsilon           <- if (!is.null(args$epsilon)) args$epsilon else 0
   lsd_threshold     <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 2
   rolling_window    <- if (!is.null(args$rolling_window)) args$rolling_window else 5
   

@@ -132,7 +132,7 @@
 #'   Controls how quickly the model updates its parameters during training. Default is `0.01`.}
 #'
 #'     \item{`max_epochs`}{An integer specifying the maximum number of training epochs for LBC-Net.
-#'   Early stopping is applied based on `lsd_threshold` to prevent unnecessary training.
+#'   Training may stop earlier after numerical convergence of the objective.
 #'   Default is `5000`.}
 #'
 #'     \item{`lr`}{A numeric value specifying the initial learning rate for LBC-Net training using the Adam optimizer.
@@ -153,22 +153,16 @@
 #'   similar results; larger values may induce overly conservative variance estimates.}
 #'
 #'     \item{`epsilon`}{A small numeric value controlling the lower and upper bounds of the
-#'   estimated propensity scores. The default is `0.001`, ensuring scores remain within
-#'   \eqn{[\epsilon, 1 - \epsilon]} for numerical stability, particularly in cases of
-#'   poor overlap. Setting `epsilon = 0` reverts to the standard logit link function.
+#'   estimated propensity scores. The default is `0`, which uses the standard logit
+#'   link function. Positive values keep scores within \eqn{[\epsilon, 1 - \epsilon]}
+#'   for numerical stability, particularly in cases of poor overlap.
 #'   See **Details** for more on its role in model stabilization.}
 #'
-#'     \item{`lsd_threshold`}{A numeric value defining the stopping criterion based on the Local Standardized mean Difference (LSD).
-#'   Training stops when the rolling average of the maximum local balance falls below this threshold.
-#'   The default `lsd_threshold = 2` balances efficiency and precision. In cases of poor overlap or small
-#'   sample sizes, a more relaxed threshold (e.g., `5\%` or `10\%`) may be used to allow more flexibility in training.}
+#'     \item{`lsd_threshold`}{Retained for backward compatibility. LSD remains a
+#'   post-fit local-balance diagnostic but no longer controls optimization stopping.}
 #'
-#'     \item{`rolling_window`}{An integer specifying the number of recent epochs used to compute the rolling average of
-#'   the maximum local balance. Default is `5`. The early stopping mechanism is triggered when the rolling average
-#'   of the maximum LSD over the most recent `rolling_window` epochs falls below `lsd_threshold`. Specifically,
-#'   at every 200-epoch step, the maximum local balance is calculated, and a rolling average over the last
-#'   `rolling_window` steps is updated. Training halts when this rolling average drops below `lsd_threshold`,
-#'   or when the predefined maximum epochs is reached, ensuring sufficient learning capacity.}
+#'     \item{`rolling_window`}{Retained for backward compatibility but no longer
+#'   used for optimization stopping.}
 #'   }
 #'   
 #' @param setup_lbcnet_args List. Optional arguments passed to \code{\link{setup_lbcnet}} for configuring the Python environment.
@@ -213,8 +207,7 @@
 #'
 #' In well-overlapping distributions, \eqn{\epsilon = 0} (logit link function)
 #' is effective, while for poor overlap, \eqn{\epsilon = 0.001} stabilizes computation
-#' by preventing extreme probabilities (0 or 1). The default \eqn{\epsilon = 0.001}
-#' works well in most cases.
+#' by preventing extreme probabilities (0 or 1). The default is \eqn{\epsilon = 0}.
 #'
 #' If categorical covariates with more than two levels are included in `formula` or `Z`,
 #' users must manually convert them into dummy (one-hot encoded) variables before fitting the model.
@@ -234,6 +227,11 @@
 #' feature representation. After pre-training, the encoder weights are transferred
 #' to initialize the LBC-Net. This initialization improves training stability
 #' and propensity score estimation.
+#' Every 200 epochs, convergence is assessed from the change in the post-update
+#' training objective. Training stops only after the change is no larger than
+#' \eqn{10^{-6} + 10^{-4}\max(|Q_t|, |Q_{t-1}|)} for five consecutive checks,
+#' with a minimum of 2000 epochs. The lowest-objective checked model is restored
+#' before final results and LSD diagnostics are calculated.
 #'
 #' \strong{Kernel Weighting & Local Inverse Probability Weights (IPW)}:
 #' To weigh observations in local neighborhoods, we use kernel smoothing to
@@ -268,8 +266,7 @@
 #' \strong{Training Considerations & Tuning}:
 #'
 #' - Poor Overlap Situations: If groups have poor overlap
-#'   (see \code{\link{mirror_hist}}), achieving the minimum local balance may be difficult.
-#'   In such cases, relax `lsd_threshold` and increase `max_epochs`.
+#'   (see \code{\link{mirror_hist}}), achieving local balance may be difficult.
 #'
 #' - Tuning Neural Network Parameters: The local balance (`LSD`) and loss
 #'   from \code{\link[=summary.lbc_net]{summary}} can guide tuning. However, the default values
@@ -277,7 +274,8 @@
 #'
 #' - The LSD metric is used to evaluate local balance and guide hyperparameter tuning.
 #'
-#' - During training, the model tracks LSD values to determine convergence.
+#' - LSD is calculated from the returned best-objective model as a diagnostic;
+#'   it does not determine convergence.
 #'
 #'   These can be retrieved using: \code{\link{getLBC}}(object, "max_lsd"):
 #'     Returns the maximum LSD at last epoch training; \code{\link{getLBC}}(object, "mean_lsd"):
@@ -403,7 +401,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
   weight_decay <- if (!is.null(args$weight_decay)) args$weight_decay else 1e-5
   balance_lambda <- if (!is.null(args$balance_lambda)) args$balance_lambda else 1.0
   alpha <- if (!is.null(args$alpha)) args$alpha else 0.01
-  epsilon <- if (!is.null(args$epsilon)) args$epsilon else 0.001
+  epsilon <- if (!is.null(args$epsilon)) args$epsilon else 0
   lsd_threshold <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 2
   rolling_window <- if (!is.null(args$rolling_window)) args$rolling_window else 5
   

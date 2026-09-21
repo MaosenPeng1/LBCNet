@@ -1,3 +1,4 @@
+import copy
 import os
 import sys
 import torch
@@ -103,9 +104,10 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
     balance_lambda : float, optional (default=1.0)
         Weight for the penalty loss term in training.
     lsd_threshold : float, optional (default=2)
-        Threshold for stopping criteria based on LSD (Local Standardized Difference).
+        Retained for backward compatibility; LSD is diagnostic only and does
+        not control stopping.
     rolling_window : int, optional (default=5)
-        Number of past LSD values considered for early stopping.
+        Retained for backward compatibility; it does not control stopping.
     show_progress : bool, optional (default=True)
         Display progress bar for training epochs.
     compute_variance : bool, optional (default=True)
@@ -125,6 +127,8 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
             - "se": float or None
             - "ci_lower": float or None
             - "ci_upper": float or None
+        For ATE with variance computation, also includes treatment means in
+        order (1, 0), their SEs and full covariance, and influence functions.
     """
 
     # Set Device for Computation
@@ -189,11 +193,18 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
     optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=weight_decay)
     ps_model.load_vae_encoder_weights(vae_model.encoder.state_dict())
 
-    # LSD early stopping window
-    lsd_window = []  
-    
-    # Track whether early stopping happened
-    early_stopping = False  
+    check_interval = 200
+    loss_rel_tol = 1e-4
+    loss_abs_tol = 1e-6
+    convergence_patience = 5
+    min_epochs = 2000
+    previous_loss = None
+    consecutive_converged = 0
+    best_loss = float("inf")
+    best_epoch = None
+    best_state = None
+    objective_converged = False
+    epochs_run = 0
 
     # Initialize Progress Bar if `show_progress=True`
     if show_progress:
@@ -216,6 +227,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
 
         loss.backward()
         optimizer.step()
+        epochs_run = epoch + 1
 
         # Update Progress Bar (if enabled)
         if show_progress:
@@ -232,42 +244,68 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
             })
             pbar.update(1)
 
-        # Early Stopping Based on LSD Threshold
-        if (epoch + 1) % 200 == 0:
+        is_convergence_check = epochs_run % check_interval == 0
+        if is_convergence_check or epochs_run == int(max_epochs):
             ps_model.eval()
             with torch.no_grad():
-                LSD_max, LSD_mean = lsd_cal(ps_model(Z_norm).squeeze(), T, Z, ck, h, kernel_id, ate = ate)
-                lsd_window.append(LSD_max)
+                check_outputs = ps_model(Z_norm).squeeze()
+                check_loss = lbc_net_loss(
+                    check_outputs, T, Z_norm, ck, h, ate=ate,
+                    kernel_id=kernel_id, balance_lambda=balance_lambda
+                )
+            if not torch.isfinite(check_loss):
+                raise RuntimeError("LBC-Net convergence check produced a non-finite loss.")
 
-                # Maintain the rolling window size
-                if len(lsd_window) > rolling_window:
-                    lsd_window.pop(0)
+            current_loss = float(check_loss.item())
+            if current_loss < best_loss:
+                best_loss = current_loss
+                best_epoch = epochs_run
+                best_state = copy.deepcopy(ps_model.state_dict())
 
-                # Compute rolling LSD mean and stop if below threshold
-                if len(lsd_window) == rolling_window:
-                    mean_lsd_window = torch.mean(torch.stack(lsd_window))
-                    if mean_lsd_window < lsd_threshold:
-                        print(f"✅ Stopping early at epoch {epoch + 1} (rolling average max LSD < {lsd_threshold}%)")
-                        early_stopping = True
-                        break
+            if is_convergence_check:
+                if previous_loss is not None:
+                    loss_change = abs(current_loss - previous_loss)
+                    loss_tolerance = (
+                        loss_abs_tol
+                        + loss_rel_tol * max(abs(current_loss), abs(previous_loss))
+                    )
+                    current_converged = loss_change <= loss_tolerance
+                    if epochs_run >= min_epochs and current_converged:
+                        consecutive_converged += 1
+                    else:
+                        consecutive_converged = 0
+                previous_loss = current_loss
 
-    if not early_stopping:
-        print("⚠️ Stopping criterion not met at max epochs. "
-            "Try increasing `max_epochs` or adjusting `lsd_threshold` for better convergence.")  
+                if consecutive_converged >= convergence_patience:
+                    print(f"✅ Stopping early at epoch {epochs_run} (training objective converged)")
+                    objective_converged = True
+                    break
+
+    if not objective_converged:
+        print("⚠️ Maximum epochs reached before objective convergence.")
 
     # Close Progress Bar if enabled
     if show_progress:
         pbar.close() 
 
-    # Compute Final Propensity Scores
+    if best_state is None:
+        raise RuntimeError("LBC-Net did not produce a finite objective checkpoint.")
+    ps_model.load_state_dict(best_state)
+    ps_model.eval()
+
+    # Compute Final Propensity Scores and LSD from the best-objective checkpoint
     with torch.no_grad():
         final_outputs = ps_model(Z_norm).squeeze()
+        final_loss = lbc_net_loss(
+            final_outputs, T, Z_norm, ck, h, ate=ate,
+            kernel_id=kernel_id, balance_lambda=balance_lambda
+        )
         final_LSD_max, final_LSD_mean = lsd_cal(final_outputs, T, Z, ck, h, kernel_id, ate = ate)
         ps = final_outputs.detach().cpu().numpy()
 
     result = {
         "propensity_scores": ps.tolist(),
-        "total_loss": float(loss.item()),
+        "total_loss": float(final_loss.item()),
         "max_lsd": float(final_LSD_max.item()),
         "mean_lsd": float(final_LSD_mean.item()),
     }
@@ -305,7 +343,15 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
                 estimand=estimand,    
                 kernel_id=kernel_id,
                 alpha=alpha,
+                return_joint=(estimand == "ATE"),
             )
+            if estimand == "ATE":
+                joint = se_t
+                se_t = joint["se"]
+                for component in (
+                    "means", "se_means", "covariance_means", "influence_functions"
+                ):
+                    result[component] = joint[component].detach().cpu().numpy()
             # se_t may already be scalar; convert robustly
             se_val = float(
                 se_t.detach().cpu().item() if hasattr(se_t, "detach") else se_t

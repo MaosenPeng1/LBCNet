@@ -12,7 +12,7 @@
 #' \{R_i^{(t)}/\pi_i^{(t)}-1\}Z_i,}
 #' and componentwise calibration uses
 #' \deqn{\omega(c_k,\pi_i^{(t)})
-#' \{R_i^{(t)}-\pi_i^{(t)}\}/\{c_k(1-c_k)\}.}
+#' \{R_i^{(t)}-\pi_i^{(t)}\}/\sqrt{c_k(1-c_k)}.}
 #' The calibration moment is multiplied by the square root of
 #' \code{balance_lambda}, so its squared contribution has weight
 #' \code{balance_lambda}. The stored training loss applies the common positive
@@ -38,11 +38,13 @@
 #' function, a different sensitivity row for each mean, and retains the full
 #' covariance matrix.
 #'
-#' Training diagnostics and the rolling early-stopping rule use only
-#' treatment-versus-population LSD. This is the same quantity reported
-#' publicly by \code{lsd(fit)$versus_population}. The secondary pairwise LSD
-#' is an on-demand public diagnostic and is not used for optimization or
-#' stopping.
+#' Optimization stops after numerical convergence of the post-update training
+#' objective over five consecutive 200-epoch checks, with a minimum of 2000
+#' epochs. The lowest-objective checked model is restored before final results
+#' are calculated. Treatment-versus-population LSD is then calculated from that
+#' model as a diagnostic and is reported publicly by
+#' \code{lsd(fit)$versus_population}; neither it nor the secondary pairwise LSD
+#' controls stopping.
 #'
 #' @param data Optional data frame containing variables in \code{formula}.
 #' @param formula Optional treatment-on-covariates formula. When supplied,
@@ -65,6 +67,9 @@
 #'   \code{lsd_threshold}, \code{rolling_window}, and
 #'   \code{compute_variance}. A supplied \code{h} may be a length-\code{K}
 #'   vector or an \eqn{L} by \eqn{K} matrix and skips pilot estimation.
+#'   The default \code{epsilon = 0}. \code{lsd_threshold} and
+#'   \code{rolling_window} are retained for backward compatibility but no
+#'   longer control optimization stopping.
 #' @param setup_lbcnet_args List passed to \code{\link{setup_lbcnet}} when
 #'   Python is not already set up.
 #'
@@ -122,7 +127,7 @@ m_lbcnet <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   weight_decay <- if (is.null(args$weight_decay)) 1e-5 else args$weight_decay
   balance_lambda <- if (is.null(args$balance_lambda)) 1 else args$balance_lambda
   alpha <- if (is.null(args$alpha)) 0.01 else args$alpha
-  epsilon <- if (is.null(args$epsilon)) 0.001 else args$epsilon
+  epsilon <- if (is.null(args$epsilon)) 0 else args$epsilon
   lsd_threshold <- if (is.null(args$lsd_threshold)) 2 else args$lsd_threshold
   rolling_window <- if (is.null(args$rolling_window)) 5L else args$rolling_window
   compute_variance <- if (is.null(args$compute_variance)) TRUE else
