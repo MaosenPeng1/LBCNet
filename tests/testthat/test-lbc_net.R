@@ -12,6 +12,7 @@ test_that("lbc_net runs correctly with minimal inputs", {
 
   # Check if output is a valid lbc_net object
   expect_s3_class(model, "lbc_net")
+  expect_equal(model$parameters$epsilon, 0.001)
 
   # Check fitted values are within valid range (0,1)
   expect_true(all(model$fitted.values > 0 & model$fitted.values < 1))

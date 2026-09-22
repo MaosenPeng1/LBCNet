@@ -99,14 +99,17 @@ computations will automatically fall back to the CPU.}
 
 \item{show_progress}{A logical value indicating whether to display a progress bar during training.
 If `TRUE` (default), displays elapsed time, remaining time, loss values, and training speed
-(iterations per second). This helps monitor training progress efficiently. Set to `FALSE` to disable the display.}
+(iterations per second). This helps monitor the Phase 1 early-stopping loop and, when triggered,
+the follow-up Phase 2 refinement stage. Set to `FALSE` to disable the display.}
 
 \item{...}{Additional parameters for model tuning, including:
   \describe{
     \item{`ck`}{a numeric vector of kernel center points. Values should be
   strictly between `0` and `1`. If `NULL`, `ck` is automatically computed
   using the default `K`. If provided, user-defined grid points should
-  adhere to the constraint `0 < ck < 1`.}
+  adhere to the constraint `0 < ck < 1`. The local calibration moment is
+  normalized by \eqn{\sqrt{c_k(1-c_k)}} to avoid unstable scaling near the
+  boundaries of the grid.}
 
     \item{`h`}{A numeric vector of bandwidth values for kernel weighting. By
   default, an adaptive bandwidth is automatically computed via preliminary
@@ -144,8 +147,9 @@ If `TRUE` (default), displays elapsed time, remaining time, loss values, and tra
   Controls how quickly the model updates its parameters during training. Default is `0.01`.}
 
     \item{`max_epochs`}{An integer specifying the maximum number of training epochs for LBC-Net.
-  Training may stop earlier after numerical convergence of the objective.
-  Default is `5000`.}
+  The first training loop may stop earlier when the rolling LSD criterion is met.
+  If that threshold is reached, the saved Phase 1 state is followed by a short low-learning-rate
+  Phase 2 refinement. Default is `5000`.}
 
     \item{`lr`}{A numeric value specifying the initial learning rate for LBC-Net training using the Adam optimizer.
   The learning rate controls how much the model updates during each training step.
@@ -165,16 +169,22 @@ If `TRUE` (default), displays elapsed time, remaining time, loss values, and tra
   similar results; larger values may induce overly conservative variance estimates.}
 
     \item{`epsilon`}{A small numeric value controlling the lower and upper bounds of the
-  estimated propensity scores. The default is `0`, which uses the standard logit
-  link function. Positive values keep scores within \eqn{[\epsilon, 1 - \epsilon]}
+  estimated propensity scores. The default is `0.001`. Positive values keep
+  scores within \eqn{[\epsilon, 1 - \epsilon]}
   for numerical stability, particularly in cases of poor overlap.
   See **Details** for more on its role in model stabilization.}
 
-    \item{`lsd_threshold`}{Retained for backward compatibility. LSD remains a
-  post-fit local-balance diagnostic but no longer controls optimization stopping.}
+    \item{`lsd_threshold`}{A numeric value defining the Phase 1 stopping criterion based on the Local Standardized mean Difference (LSD).
+  The rolling average of the maximum local balance must fall below this threshold to trigger the early stop.
+  Once Phase 1 stops, a brief Phase 2 refinement may be run at a lower learning rate. The default
+  `lsd_threshold = 10` is intentionally more permissive to allow continued refinement in settings with
+  moderate overlap or modest sample size.}
 
-    \item{`rolling_window`}{Retained for backward compatibility but no longer
-  used for optimization stopping.}
+    \item{`rolling_window`}{An integer specifying the number of recent epochs used to compute the rolling average of
+  the maximum local balance. Default is `5`. The Phase 1 early-stopping mechanism is triggered when the rolling average
+  of the maximum LSD over the most recent `rolling_window` epochs falls below `lsd_threshold`. At every 200-epoch
+  check, the maximum local balance is calculated and the rolling mean is updated. If the refined Phase 2 solution no
+  longer satisfies the Phase 1 balance target, the saved Phase 1 state is restored.}
   }}
 
 \item{setup_lbcnet_args}{List. Optional arguments passed to \code{\link{setup_lbcnet}} for configuring the Python environment.
@@ -228,7 +238,8 @@ p(\mathbf{Z}) = \epsilon + (1 - 2\epsilon)
 
 In well-overlapping distributions, \eqn{\epsilon = 0} (logit link function)
 is effective, while for poor overlap, \eqn{\epsilon = 0.001} stabilizes computation
-by preventing extreme probabilities (0 or 1). The default is \eqn{\epsilon = 0}.
+by preventing extreme probabilities (0 or 1). The default is
+\eqn{\epsilon = 0.001}; setting \eqn{\epsilon = 0} uses the standard logit link.
 
 If categorical covariates with more than two levels are included in `formula` or `Z`,
 users must manually convert them into dummy (one-hot encoded) variables before fitting the model.
@@ -248,11 +259,6 @@ using a Variational Autoencoder (VAE) is incorporated to enhance
 feature representation. After pre-training, the encoder weights are transferred
 to initialize the LBC-Net. This initialization improves training stability
 and propensity score estimation.
-Every 200 epochs, convergence is assessed from the change in the post-update
-training objective. Training stops only after the change is no larger than
-\eqn{10^{-6} + 10^{-4}\max(|Q_t|, |Q_{t-1}|)} for five consecutive checks,
-with a minimum of 2000 epochs. The lowest-objective checked model is restored
-before final results and LSD diagnostics are calculated.
 
 \strong{Kernel Weighting & Local Inverse Probability Weights (IPW)}:
 To weigh observations in local neighborhoods, we use kernel smoothing to
@@ -287,7 +293,8 @@ choosing \eqn{\omega^{*}(p_i) = p_i} results in the Average Treatment Effect on 
 \strong{Training Considerations & Tuning}:
 
 - Poor Overlap Situations: If groups have poor overlap
-  (see \code{\link{mirror_hist}}), achieving local balance may be difficult.
+  (see \code{\link{mirror_hist}}), achieving the minimum local balance may be difficult.
+  In such cases, relax `lsd_threshold` and increase `max_epochs`.
 
 - Tuning Neural Network Parameters: The local balance (`LSD`) and loss
   from \code{\link[=summary.lbc_net]{summary}} can guide tuning. However, the default values
@@ -295,8 +302,7 @@ choosing \eqn{\omega^{*}(p_i) = p_i} results in the Average Treatment Effect on 
 
 - The LSD metric is used to evaluate local balance and guide hyperparameter tuning.
 
-- LSD is calculated from the returned best-objective model as a diagnostic;
-  it does not determine convergence.
+- During training, the model tracks LSD values to determine convergence.
 
   These can be retrieved using: \code{\link{getLBC}}(object, "max_lsd"):
     Returns the maximum LSD at last epoch training; \code{\link{getLBC}}(object, "mean_lsd"):

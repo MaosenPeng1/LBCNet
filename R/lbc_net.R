@@ -157,8 +157,8 @@
 #'   similar results; larger values may induce overly conservative variance estimates.}
 #'
 #'     \item{`epsilon`}{A small numeric value controlling the lower and upper bounds of the
-#'   estimated propensity scores. The default is `0`, which uses the standard logit
-#'   link function. Positive values keep scores within \eqn{[\epsilon, 1 - \epsilon]}
+#'   estimated propensity scores. The default is `0.001`. Positive values keep
+#'   scores within \eqn{[\epsilon, 1 - \epsilon]}
 #'   for numerical stability, particularly in cases of poor overlap.
 #'   See **Details** for more on its role in model stabilization.}
 #'
@@ -217,8 +217,8 @@
 #'
 #' In well-overlapping distributions, \eqn{\epsilon = 0} (logit link function)
 #' is effective, while for poor overlap, \eqn{\epsilon = 0.001} stabilizes computation
-#' by preventing extreme probabilities (0 or 1). The default \eqn{\epsilon = 0}
-#' keeps the standard logit link and leaves full flexibility to users to add a small floor.
+#' by preventing extreme probabilities (0 or 1). The default is
+#' \eqn{\epsilon = 0.001}; setting \eqn{\epsilon = 0} uses the standard logit link.
 #'
 #' If categorical covariates with more than two levels are included in `formula` or `Z`,
 #' users must manually convert them into dummy (one-hot encoded) variables before fitting the model.
@@ -407,7 +407,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
   weight_decay <- if (!is.null(args$weight_decay)) args$weight_decay else 1e-5
   balance_lambda <- if (!is.null(args$balance_lambda)) args$balance_lambda else 1.0
   alpha <- if (!is.null(args$alpha)) args$alpha else 0.01
-  epsilon <- if (!is.null(args$epsilon)) args$epsilon else 0
+  epsilon <- if (!is.null(args$epsilon)) args$epsilon else 0.001
   lsd_threshold <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 10
   rolling_window <- if (!is.null(args$rolling_window)) args$rolling_window else 5
   

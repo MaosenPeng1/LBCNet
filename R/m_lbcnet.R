@@ -68,7 +68,9 @@
 #'   \code{balance_lambda}, \code{alpha}, \code{epsilon},
 #'   \code{lsd_threshold}, \code{rolling_window}, and
 #'   \code{compute_variance}. A supplied \code{h} may be a length-\code{K}
-#'   vector or an \eqn{L} by \eqn{K} matrix and skips pilot estimation.
+#'   vector or an \eqn{L} by \eqn{K} matrix and skips pilot estimation. The
+#'   default is \code{epsilon = 0.001}; setting \code{epsilon = 0} disables the
+#'   probability floor.
 #' @param setup_lbcnet_args List passed to \code{\link{setup_lbcnet}} when
 #'   Python is not already set up.
 #'
@@ -126,7 +128,7 @@ m_lbcnet <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   weight_decay <- if (is.null(args$weight_decay)) 1e-5 else args$weight_decay
   balance_lambda <- if (is.null(args$balance_lambda)) 1 else args$balance_lambda
   alpha <- if (is.null(args$alpha)) 0.01 else args$alpha
-  epsilon <- if (is.null(args$epsilon)) 0 else args$epsilon
+  epsilon <- if (is.null(args$epsilon)) 0.001 else args$epsilon
   lsd_threshold <- if (is.null(args$lsd_threshold)) 10 else args$lsd_threshold
   rolling_window <- if (is.null(args$rolling_window)) 5L else args$rolling_window
   compute_variance <- if (is.null(args$compute_variance)) TRUE else

@@ -57,8 +57,11 @@ influence-function covariance matrix.
 \details{
 This implementation applies to the current ATE inference framework.
 Let \eqn{\hat\mu} contain the marginal treatment mean estimates and let
-\eqn{V_\mu} be their stored joint covariance matrix. No covariance is
-reconstructed from marginal standard errors.
+\eqn{V_\mu} be their stored joint covariance matrix. The authoritative
+inputs are the Python post-processing outputs (\code{means}, \code{se_means},
+\code{covariance_means}, and \code{pairwise_ate}) produced during fitting; R does
+not reconstruct a second effect or variance estimator from the marginal
+summaries.
 
 The global null is \eqn{H_0: \mu_1 = \cdots = \mu_L}. It uses
 \code{cbind(diag(L - 1), -rep(1, L - 1))}, comparing each of the first

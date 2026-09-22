@@ -50,10 +50,9 @@ training/balance diagnostics are returned.}
 \code{balance_lambda}, \code{alpha}, \code{epsilon},
 \code{lsd_threshold}, \code{rolling_window}, and
 \code{compute_variance}. A supplied \code{h} may be a length-\code{K}
-vector or an \eqn{L} by \eqn{K} matrix and skips pilot estimation.
-The default \code{epsilon = 0}. \code{lsd_threshold} and
-\code{rolling_window} are retained for backward compatibility but no
-longer control optimization stopping.}
+vector or an \eqn{L} by \eqn{K} matrix and skips pilot estimation. The
+default is \code{epsilon = 0.001}; setting \code{epsilon = 0} disables the
+probability floor.}
 
 \item{setup_lbcnet_args}{List passed to \code{\link{setup_lbcnet}} when
 Python is not already set up.}
@@ -84,10 +83,11 @@ The local balance contribution is
 and componentwise calibration uses
 \deqn{\omega(c_k,\pi_i^{(t)})
 \{R_i^{(t)}-\pi_i^{(t)}\}/\sqrt{c_k(1-c_k)}.}
-The calibration moment is multiplied by the square root of
-\code{balance_lambda}, so its squared contribution has weight
-\code{balance_lambda}. The stored training loss applies the common positive
-optimizer scaling \eqn{N^2 Q^*}.
+This normalization matches the binary implementation and prevents the local
+calibration term from exploding near the edges of the grid. The calibration
+moment is multiplied by the square root of \code{balance_lambda}, so its
+squared contribution has weight \code{balance_lambda}. The stored training
+loss applies the common positive optimizer scaling \eqn{N^2 Q^*}.
 
 Probabilities are
 \deqn{\pi_i^{(t)}=\epsilon+(1-L\epsilon)
@@ -109,13 +109,14 @@ influence-function inference uses one shared nuisance-parameter influence
 function, a different sensitivity row for each mean, and retains the full
 covariance matrix.
 
-Optimization stops after numerical convergence of the post-update training
-objective over five consecutive 200-epoch checks, with a minimum of 2000
-epochs. The lowest-objective checked model is restored before final results
-are calculated. Treatment-versus-population LSD is then calculated from that
-model as a diagnostic and is reported publicly by
-\code{lsd(fit)$versus_population}; neither it nor the secondary pairwise LSD
-controls stopping.
+Training diagnostics and the rolling early-stopping rule use only
+treatment-versus-population LSD. The main loop first stops at the original
+Phase 1 LSD threshold, saves that best state, and then optionally runs a short
+lower-learning-rate Phase 2 refinement. The final model is accepted only if the
+refined solution preserves the Phase 1 balance target; otherwise the Phase 1
+state is restored. This is the same quantity reported publicly by
+\code{lsd(fit)$versus_population}. The secondary pairwise LSD is an
+on-demand public diagnostic and is not used for optimization or stopping.
 }
 \examples{
 \dontrun{

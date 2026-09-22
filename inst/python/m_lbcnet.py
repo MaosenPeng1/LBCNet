@@ -54,7 +54,7 @@ class MLBCNet(nn.Module):
         n_treatments: int,
         hidden_dim: int = 100,
         num_layers: int = 2,
-        epsilon: float = 0.0,
+        epsilon: float = 0.001,
     ) -> None:
         super().__init__()
         if input_dim < 1:
@@ -640,7 +640,7 @@ def run_m_lbcnet(
     lr: float = 0.05,
     weight_decay: float = 1e-5,
     balance_lambda: float = 1.0,
-    epsilon: float = 0.0,
+    epsilon: float = 0.001,
     lsd_threshold: float = 2.0,
     alpha: float = 0.01,
     rolling_window: int = 5,

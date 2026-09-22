@@ -777,6 +777,7 @@ test_that("joint outcome inference retains covariance and pairwise identities", 
 test_that("epsilon flooring preserves the simplex and epsilon zero works", {
   fit <- get_m_lbcnet_test_fit("gps")
   epsilon <- fit$parameters$epsilon
+  expect_equal(epsilon, 0.001)
   expect_true(all(fit$fitted.values >= epsilon - 1e-7))
   expect_equal(rowSums(fit$fitted.values), rep(1, nrow(fit$Z)),
                tolerance = 1e-6)
