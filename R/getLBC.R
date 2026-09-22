@@ -45,10 +45,10 @@ getLBC <- function(object, name) {
 #'     \item{"loss"}{The final total loss value.}
 #'
 #'     \item{"lsd_train"}{A list containing key local standardized mean difference (LSD) values
-#'       calculated from the returned best-objective model:
+#'       recorded during training:
 #'       \itemize{
-#'         \item lsd_max – Maximum local standardized mean difference.
-#'         \item lsd_mean – Mean local standardized mean difference.
+#'         \item lsd_max – Maximum local standardized mean difference observed during training.
+#'         \item lsd_mean – Mean local standardized mean difference observed during training.
 #'       }
 #'       The complete LSD profile can be computed using the function lsd().
 #'     }
@@ -56,9 +56,8 @@ getLBC <- function(object, name) {
 #'     \item{"parameters"}{Model hyperparameters such as hidden_dim, L, vae_lr, lr,
 #'       weight_decay, balance_lambda, alpha, epsilon.}
 #'
-#'     \item{"stopping_criteria"}{Stopping settings including max_epochs and
-#'       legacy lsd_threshold and rolling_window values retained for backward
-#'       compatibility. LSD does not control optimization stopping.}
+#'     \item{"stopping_criteria"}{Stopping parameters including lsd_threshold,
+#'       rolling_window, and max_epochs.}
 #'
 #'     \item{"seed"}{Random seed used for reproducibility.}
 #'     \item{"call"}{The matched function call.}

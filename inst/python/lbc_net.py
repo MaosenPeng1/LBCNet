@@ -31,7 +31,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
                 seed=100, hidden_dim=100, L=2, 
                 vae_epochs=250, vae_lr=0.01, 
                 max_epochs=5000, lr=0.05, weight_decay=1e-5, 
-                balance_lambda=1.0, epsilon = 0.001, lsd_threshold=2, alpha = 0.01,
+                balance_lambda=1.0, epsilon = 0.0, lsd_threshold=2, alpha = 0.01,
                 rolling_window=5, show_progress=True, compute_variance=True):
     """
     Runs the LBC-Net estimation for propensity score calculation.
@@ -66,7 +66,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
     kernel : str, optional (default="gaussian")
         Kernel function for local balance adjustment.
         Supported values: ["gaussian", "epanechnikov", "uniform"].
-    epsilon : float, optional (default=0.001)
+    epsilon : float, optional (default=0.0)
         Epsilon value for numerical stability in kernel computation.
     ate : float, optional (default=1)
         Average Treatment Effect (ATE) for balancing.
@@ -104,10 +104,9 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
     balance_lambda : float, optional (default=1.0)
         Weight for the penalty loss term in training.
     lsd_threshold : float, optional (default=2)
-        Retained for backward compatibility; LSD is diagnostic only and does
-        not control stopping.
+        Threshold for stopping criteria based on LSD (Local Standardized Difference).
     rolling_window : int, optional (default=5)
-        Retained for backward compatibility; it does not control stopping.
+        Number of past LSD values considered for early stopping.
     show_progress : bool, optional (default=True)
         Display progress bar for training epochs.
     compute_variance : bool, optional (default=True)
@@ -127,8 +126,6 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
             - "se": float or None
             - "ci_lower": float or None
             - "ci_upper": float or None
-        For ATE with variance computation, also includes treatment means in
-        order (1, 0), their SEs and full covariance, and influence functions.
     """
 
     # Set Device for Computation
@@ -190,21 +187,18 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
 
     # Train LBC-Net Model
     ps_model = lbc_net(p, hidden_dim, L, epsilon).to(device)
-    optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=0.0)
     ps_model.load_vae_encoder_weights(vae_model.encoder.state_dict())
 
-    check_interval = 200
-    loss_rel_tol = 1e-4
-    loss_abs_tol = 1e-6
-    convergence_patience = 5
-    min_epochs = 2000
-    previous_loss = None
-    consecutive_converged = 0
-    best_loss = float("inf")
-    best_epoch = None
-    best_state = None
-    objective_converged = False
-    epochs_run = 0
+    # LSD early stopping window
+    lsd_window = []  
+    
+    # Track whether early stopping happened
+    early_stopping = False  
+    phase1_state = None
+    phase1_epoch = None
+    phase1_lsd_max = None
+    phase1_lsd_mean = None
 
     # Initialize Progress Bar if `show_progress=True`
     if show_progress:
@@ -227,7 +221,6 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
 
         loss.backward()
         optimizer.step()
-        epochs_run = epoch + 1
 
         # Update Progress Bar (if enabled)
         if show_progress:
@@ -244,68 +237,151 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
             })
             pbar.update(1)
 
-        is_convergence_check = epochs_run % check_interval == 0
-        if is_convergence_check or epochs_run == int(max_epochs):
+        # Early Stopping Based on LSD Threshold
+        if (epoch + 1) % 200 == 0:
             ps_model.eval()
             with torch.no_grad():
-                check_outputs = ps_model(Z_norm).squeeze()
-                check_loss = lbc_net_loss(
-                    check_outputs, T, Z_norm, ck, h, ate=ate,
-                    kernel_id=kernel_id, balance_lambda=balance_lambda
-                )
-            if not torch.isfinite(check_loss):
-                raise RuntimeError("LBC-Net convergence check produced a non-finite loss.")
+                LSD_max, LSD_mean = lsd_cal(ps_model(Z_norm).squeeze(), T, Z, ck, h, kernel_id, ate = ate)
+                lsd_window.append(LSD_max)
 
-            current_loss = float(check_loss.item())
-            if current_loss < best_loss:
-                best_loss = current_loss
-                best_epoch = epochs_run
-                best_state = copy.deepcopy(ps_model.state_dict())
+                # Maintain the rolling window size
+                if len(lsd_window) > rolling_window:
+                    lsd_window.pop(0)
 
-            if is_convergence_check:
-                if previous_loss is not None:
-                    loss_change = abs(current_loss - previous_loss)
-                    loss_tolerance = (
-                        loss_abs_tol
-                        + loss_rel_tol * max(abs(current_loss), abs(previous_loss))
+                # Compute rolling LSD mean and stop if below threshold
+                if len(lsd_window) == rolling_window:
+                    mean_lsd_window = torch.mean(torch.stack(lsd_window))
+                    if mean_lsd_window < lsd_threshold:
+                        phase1_state = copy.deepcopy(ps_model.state_dict())
+                        phase1_epoch = epoch + 1
+                        phase1_lsd_max = float(LSD_max.detach().cpu().item())
+                        phase1_lsd_mean = float(LSD_mean.detach().cpu().item())
+                        print(f"✅ Stopping early at epoch {epoch + 1} (rolling average max LSD < {lsd_threshold}%)")
+                        early_stopping = True
+                        break
+
+    if not early_stopping:
+        print("⚠️ Stopping criterion not met at max epochs. "
+            "Try increasing `max_epochs` or adjusting `lsd_threshold` for better convergence.")  
+
+    phase2_selected = False
+    phase2_pbar = None
+    if show_progress and pbar is not None:
+        pbar.close()
+
+    if early_stopping and phase1_state is not None:
+        phase2_lr = lr * 0.1
+        phase2_optimizer = optim.Adam(ps_model.parameters(), lr=phase2_lr, weight_decay=0.0)
+        phase2_check_interval = 100
+        phase2_max_epochs = 3000
+        phase2_rel_tol = 1e-3
+        phase2_abs_tol = 1e-6
+        phase2_patience = 5
+        phase2_best_loss = None
+        phase2_best_epoch = None
+        phase2_best_state = None
+        phase2_previous_loss = None
+        phase2_consecutive = 0
+
+        if show_progress:
+            phase2_pbar = tqdm(
+                total=phase2_max_epochs,
+                desc="Phase 2 refinement",
+                position=0,
+                leave=False,
+                bar_format="{l_bar}{bar} {n_fmt}/{total_fmt} [{rate_fmt} {postfix}]"
+            )
+
+        for phase2_epoch in range(1, phase2_max_epochs + 1):
+            ps_model.train()
+            phase2_optimizer.zero_grad()
+            phase2_outputs = ps_model(Z_norm).squeeze()
+            phase2_loss = lbc_net_loss(
+                phase2_outputs, T, Z_norm, ck, h, ate=ate,
+                kernel_id=kernel_id, balance_lambda=balance_lambda
+            )
+            phase2_loss.backward()
+            phase2_optimizer.step()
+
+            if show_progress and phase2_pbar is not None:
+                phase2_pbar.set_postfix({
+                    "Phase": "2",
+                    "Epoch": phase2_epoch,
+                    "Loss": f"{phase2_loss.item():.4f}"
+                })
+                phase2_pbar.update(1)
+
+            if phase2_epoch % phase2_check_interval == 0:
+                ps_model.eval()
+                with torch.no_grad():
+                    checked_outputs = ps_model(Z_norm).squeeze()
+                    current_loss = lbc_net_loss(
+                        checked_outputs, T, Z_norm, ck, h, ate=ate,
+                        kernel_id=kernel_id, balance_lambda=balance_lambda
                     )
-                    current_converged = loss_change <= loss_tolerance
-                    if epochs_run >= min_epochs and current_converged:
-                        consecutive_converged += 1
+                    current_loss_value = float(current_loss.detach().cpu().item())
+
+                if (phase2_best_loss is None) or (current_loss_value < phase2_best_loss):
+                    phase2_best_loss = current_loss_value
+                    phase2_best_epoch = phase2_epoch
+                    phase2_best_state = copy.deepcopy(ps_model.state_dict())
+
+                if phase2_previous_loss is not None:
+                    loss_change = abs(current_loss_value - phase2_previous_loss)
+                    loss_tolerance = phase2_abs_tol + phase2_rel_tol * max(
+                        abs(current_loss_value), abs(phase2_previous_loss)
+                    )
+                    if loss_change <= loss_tolerance:
+                        phase2_consecutive += 1
                     else:
-                        consecutive_converged = 0
-                previous_loss = current_loss
+                        phase2_consecutive = 0
 
-                if consecutive_converged >= convergence_patience:
-                    print(f"✅ Stopping early at epoch {epochs_run} (training objective converged)")
-                    objective_converged = True
-                    break
+                    if phase2_consecutive >= phase2_patience:
+                        break
 
-    if not objective_converged:
-        print("⚠️ Maximum epochs reached before objective convergence.")
+                phase2_previous_loss = current_loss_value
+
+        if phase2_best_state is not None:
+            ps_model.load_state_dict(phase2_best_state)
+            with torch.no_grad():
+                selected_outputs = ps_model(Z_norm).squeeze()
+                selected_lsd_max, selected_lsd_mean = lsd_cal(
+                    selected_outputs, T, Z, ck, h, kernel_id, ate=ate
+                )
+                final_lsd_max = float(selected_lsd_max.detach().cpu().item())
+                final_lsd_mean = float(selected_lsd_mean.detach().cpu().item())
+                final_loss_value = float(
+                    lbc_net_loss(
+                        selected_outputs, T, Z_norm, ck, h, ate=ate,
+                        kernel_id=kernel_id, balance_lambda=balance_lambda
+                    ).detach().cpu().item()
+                )
+
+            if torch.isfinite(torch.tensor(final_loss_value)) and final_lsd_max < lsd_threshold:
+                phase2_selected = True
+            else:
+                ps_model.load_state_dict(phase1_state)
+                phase2_selected = False
+                print("⚠️ Phase 2 refinement did not preserve the original Phase 1 balance criterion; restoring the Phase 1 model.")
+        else:
+            ps_model.load_state_dict(phase1_state)
+
+        if show_progress and phase2_pbar is not None:
+            phase2_pbar.close()
 
     # Close Progress Bar if enabled
-    if show_progress:
+    if show_progress and pbar is not None:
         pbar.close() 
 
-    if best_state is None:
-        raise RuntimeError("LBC-Net did not produce a finite objective checkpoint.")
-    ps_model.load_state_dict(best_state)
-    ps_model.eval()
-
-    # Compute Final Propensity Scores and LSD from the best-objective checkpoint
+    # Compute Final Propensity Scores
     with torch.no_grad():
         final_outputs = ps_model(Z_norm).squeeze()
-        final_loss = lbc_net_loss(
-            final_outputs, T, Z_norm, ck, h, ate=ate,
-            kernel_id=kernel_id, balance_lambda=balance_lambda
-        )
         final_LSD_max, final_LSD_mean = lsd_cal(final_outputs, T, Z, ck, h, kernel_id, ate = ate)
         ps = final_outputs.detach().cpu().numpy()
 
     result = {
         "propensity_scores": ps.tolist(),
-        "total_loss": float(final_loss.item()),
+        "total_loss": float(loss.item()),
         "max_lsd": float(final_LSD_max.item()),
         "mean_lsd": float(final_LSD_mean.item()),
     }
@@ -329,6 +405,23 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
             # Plug-in IF treating PS as fixed (for this estimand)
             phi_ipw = plug_in_if(Y, T, final_outputs, estimand=estimand)
 
+            # Provide treatment-specific mean estimates as expected by the R wrapper.
+            mu1 = ipw_est(Y, T, final_outputs, estimand="mu1")
+            mu0 = ipw_est(Y, T, final_outputs, estimand="mu0")
+            means = torch.stack([mu1, mu0], dim=0)
+
+            phi_mu1 = plug_in_if(Y, T, final_outputs, estimand="mu1")
+            phi_mu0 = plug_in_if(Y, T, final_outputs, estimand="mu0")
+            influence_means = torch.stack([phi_mu1, phi_mu0], dim=1)
+            influence_centered = influence_means - influence_means.mean(dim=0, keepdim=True)
+            covariance_means = (influence_centered.T @ influence_centered) / (Y.numel() ** 2)
+            se_means = torch.sqrt(torch.diagonal(covariance_means).clamp_min(0.0))
+
+            result["means"] = means.detach().cpu().numpy().tolist()
+            result["se_means"] = se_means.detach().cpu().numpy().tolist()
+            result["covariance_means"] = covariance_means.detach().cpu().numpy()
+            result["influence_functions"] = influence_means.detach().cpu().numpy()
+
         # IF-based SE and CI only if requested 
         if compute_variance:
             se_t = if_var(
@@ -343,15 +436,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
                 estimand=estimand,    
                 kernel_id=kernel_id,
                 alpha=alpha,
-                return_joint=(estimand == "ATE"),
             )
-            if estimand == "ATE":
-                joint = se_t
-                se_t = joint["se"]
-                for component in (
-                    "means", "se_means", "covariance_means", "influence_functions"
-                ):
-                    result[component] = joint[component].detach().cpu().numpy()
             # se_t may already be scalar; convert robustly
             se_val = float(
                 se_t.detach().cpu().item() if hasattr(se_t, "detach") else se_t

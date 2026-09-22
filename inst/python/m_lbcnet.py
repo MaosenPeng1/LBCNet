@@ -54,7 +54,7 @@ class MLBCNet(nn.Module):
         n_treatments: int,
         hidden_dim: int = 100,
         num_layers: int = 2,
-        epsilon: float = 0.001,
+        epsilon: float = 0.0,
     ) -> None:
         super().__init__()
         if input_dim < 1:
@@ -160,7 +160,7 @@ def m_lbcnet_moments(
 
     indicators = _one_hot(treatment, n_treatments, propensity_scores.dtype)
     calibration_scale = math.sqrt(float(balance_lambda))
-    denom_ck = torch.sqrt(ck * (1.0 - ck))
+    denom_ck = torch.sqrt(ck * (1 - ck))
     arm_blocks: List[torch.Tensor] = []
 
     for treatment_index in range(n_treatments):
@@ -218,7 +218,7 @@ def m_lbcnet_loss(
     n_grid = ck.numel()
     mbar = moments.mean(dim=0)
     q_star = torch.dot(mbar, mbar) / float(n_treatments * n_grid)
-    return q_star * (float(n_obs * n_obs) if optimizer_scale else 1.0)
+    return q_star
 
 
 def m_lbcnet_lsd(
@@ -640,18 +640,14 @@ def run_m_lbcnet(
     lr: float = 0.05,
     weight_decay: float = 1e-5,
     balance_lambda: float = 1.0,
-    epsilon: float = 0.001,
+    epsilon: float = 0.0,
     lsd_threshold: float = 2.0,
     alpha: float = 0.01,
     rolling_window: int = 5,
     show_progress: bool = True,
     compute_variance: bool = True,
 ) -> Dict[str, object]:
-    """Fit one joint M-LBCNet GPS and, when requested, joint ATE inference.
-
-    ``lsd_threshold`` and ``rolling_window`` are retained for backward
-    compatibility, but LSD is diagnostic only and does not control stopping.
-    """
+    """Fit one joint M-LBCNet GPS and, when requested, joint ATE inference."""
     kernel_ids = {"gaussian": 0, "uniform": 1, "epanechnikov": 2}
     if kernel not in kernel_ids:
         raise ValueError(
@@ -777,20 +773,15 @@ def run_m_lbcnet(
     if vae_epochs > 0:
         vae_weights_loaded = gps_model.load_vae_encoder_weights(vae_model)
     optimizer = optim.Adam(
-        gps_model.parameters(), lr=float(lr), weight_decay=float(weight_decay)
+        gps_model.parameters(), lr=float(lr), weight_decay=0.0
     )
 
-    check_interval = 200
-    loss_rel_tol = 1e-4
-    loss_abs_tol = 1e-6
-    convergence_patience = 5
-    min_epochs = 2000
-    previous_loss: Optional[float] = None
-    consecutive_converged = 0
-    best_loss = float("inf")
-    best_epoch: Optional[int] = None
-    best_state = None
-    objective_converged = False
+    lsd_window: List[float] = []
+    early_stopping = False
+    phase1_state = None
+    phase1_epoch = None
+    phase1_lsd_max = None
+    phase1_lsd_mean = None
     epochs_run = 0
     if show_progress:
         pbar = tqdm(
@@ -837,63 +828,180 @@ def run_m_lbcnet(
             )
             pbar.update(1)
 
-        is_convergence_check = epochs_run % check_interval == 0
-        if is_convergence_check or epochs_run == max_epochs:
+        if epochs_run % 200 == 0:
             gps_model.eval()
             with torch.no_grad():
                 check_gps = gps_model(Z_processed)
-                check_loss = m_lbcnet_loss(
+                check_max_lsd, _, _, _ = m_lbcnet_lsd(
                     check_gps,
                     treatment,
-                    Z_processed,
+                    Z_raw,
                     ck_tensor,
                     h_tensor,
                     kernel_id=kernel_id,
-                    balance_lambda=float(balance_lambda),
-                    optimizer_scale=True,
                 )
-            if not torch.isfinite(check_loss):
-                raise RuntimeError(
-                    "M-LBCNet convergence check produced a non-finite loss."
+            lsd_window.append(float(check_max_lsd.detach().cpu()))
+            if len(lsd_window) > rolling_window:
+                lsd_window.pop(0)
+            if (
+                len(lsd_window) == rolling_window
+                and float(np.mean(lsd_window)) < float(lsd_threshold)
+            ):
+                phase1_state = copy.deepcopy(gps_model.state_dict())
+                phase1_epoch = epoch + 1
+                phase1_lsd_max = float(check_max_lsd.detach().cpu().item())
+                phase1_lsd_mean = float(
+                    m_lbcnet_lsd(
+                        check_gps,
+                        treatment,
+                        Z_raw,
+                        ck_tensor,
+                        h_tensor,
+                        kernel_id=kernel_id,
+                    )[1].detach().cpu().item()
                 )
+                print(
+                    f"✅ Stopping early at epoch {epoch + 1} "
+                    f"(rolling average max LSD < {lsd_threshold}%)"
+                )
+                early_stopping = True
+                break
 
-            current_loss = float(check_loss.detach().cpu())
-            if current_loss < best_loss:
-                best_loss = current_loss
-                best_epoch = epochs_run
-                best_state = copy.deepcopy(gps_model.state_dict())
+    if not early_stopping:
+        print(
+            "⚠️ Stopping criterion not met at max epochs. "
+            "Try increasing `max_epochs` or adjusting `lsd_threshold` "
+            "for better convergence."
+        )
 
-            if is_convergence_check:
-                if previous_loss is not None:
-                    loss_change = abs(current_loss - previous_loss)
-                    loss_tolerance = (
-                        loss_abs_tol
-                        + loss_rel_tol * max(abs(current_loss), abs(previous_loss))
-                    )
-                    current_converged = loss_change <= loss_tolerance
-                    if epochs_run >= min_epochs and current_converged:
-                        consecutive_converged += 1
-                    else:
-                        consecutive_converged = 0
-                previous_loss = current_loss
-
-                if consecutive_converged >= convergence_patience:
-                    print(
-                        f"✅ Stopping early at epoch {epochs_run} "
-                        "(training objective converged)"
-                    )
-                    objective_converged = True
-                    break
-
-    if not objective_converged:
-        print("⚠️ Maximum epochs reached before objective convergence.")
-
-    if show_progress:
+    phase2_pbar = None
+    if show_progress and pbar is not None:
         pbar.close()
 
-    if best_state is None:
-        raise RuntimeError("M-LBCNet did not produce a finite objective checkpoint.")
-    gps_model.load_state_dict(best_state)
+    if early_stopping and phase1_state is not None:
+        phase2_lr = float(lr) * 0.1
+        phase2_optimizer = optim.Adam(
+            gps_model.parameters(), lr=phase2_lr, weight_decay=0.0
+        )
+        phase2_check_interval = 100
+        phase2_max_epochs = 3000
+        phase2_rel_tol = 1e-3
+        phase2_abs_tol = 1e-6
+        phase2_patience = 5
+        phase2_best_loss = None
+        phase2_best_epoch = None
+        phase2_best_state = None
+        phase2_previous_loss = None
+        phase2_consecutive = 0
+
+        if show_progress:
+            phase2_pbar = tqdm(
+                total=phase2_max_epochs,
+                desc="Phase 2 refinement",
+                position=0,
+                leave=False,
+                bar_format="{l_bar}{bar} {n_fmt}/{total_fmt} [{rate_fmt} {postfix}]",
+            )
+
+        for phase2_epoch in range(1, phase2_max_epochs + 1):
+            gps_model.train()
+            phase2_optimizer.zero_grad()
+            phase2_gps = gps_model(Z_processed)
+            phase2_loss = m_lbcnet_loss(
+                phase2_gps,
+                treatment,
+                Z_processed,
+                ck_tensor,
+                h_tensor,
+                kernel_id=kernel_id,
+                balance_lambda=float(balance_lambda),
+                optimizer_scale=True,
+            )
+            if not torch.isfinite(phase2_loss):
+                break
+            phase2_loss.backward()
+            phase2_optimizer.step()
+
+            if show_progress and phase2_pbar is not None:
+                phase2_pbar.set_postfix({
+                    "Phase": "2",
+                    "Epoch": phase2_epoch,
+                    "Loss": f"{phase2_loss.item():.4f}",
+                })
+                phase2_pbar.update(1)
+
+            if phase2_epoch % phase2_check_interval == 0:
+                gps_model.eval()
+                with torch.no_grad():
+                    checked_gps = gps_model(Z_processed)
+                    current_loss = m_lbcnet_loss(
+                        checked_gps,
+                        treatment,
+                        Z_processed,
+                        ck_tensor,
+                        h_tensor,
+                        kernel_id=kernel_id,
+                        balance_lambda=float(balance_lambda),
+                        optimizer_scale=True,
+                    )
+                    current_loss_value = float(current_loss.detach().cpu().item())
+
+                if (phase2_best_loss is None) or (current_loss_value < phase2_best_loss):
+                    phase2_best_loss = current_loss_value
+                    phase2_best_epoch = phase2_epoch
+                    phase2_best_state = copy.deepcopy(gps_model.state_dict())
+
+                if phase2_previous_loss is not None:
+                    loss_change = abs(current_loss_value - phase2_previous_loss)
+                    loss_tolerance = phase2_abs_tol + phase2_rel_tol * max(
+                        abs(current_loss_value), abs(phase2_previous_loss)
+                    )
+                    if loss_change <= loss_tolerance:
+                        phase2_consecutive += 1
+                    else:
+                        phase2_consecutive = 0
+
+                    if phase2_consecutive >= phase2_patience:
+                        break
+
+                phase2_previous_loss = current_loss_value
+
+        if phase2_best_state is not None:
+            gps_model.load_state_dict(phase2_best_state)
+            with torch.no_grad():
+                best_gps = gps_model(Z_processed)
+                best_lsd_max, best_lsd_mean, _, _ = m_lbcnet_lsd(
+                    best_gps,
+                    treatment,
+                    Z_raw,
+                    ck_tensor,
+                    h_tensor,
+                    kernel_id=kernel_id,
+                )
+                best_loss_value = float(
+                    m_lbcnet_loss(
+                        best_gps,
+                        treatment,
+                        Z_processed,
+                        ck_tensor,
+                        h_tensor,
+                        kernel_id=kernel_id,
+                        balance_lambda=float(balance_lambda),
+                        optimizer_scale=True,
+                    ).detach().cpu().item()
+                )
+            if torch.isfinite(torch.tensor(best_loss_value)) and float(best_lsd_max.detach().cpu().item()) < float(lsd_threshold):
+                pass
+            else:
+                gps_model.load_state_dict(phase1_state)
+                print("⚠️ Phase 2 refinement did not preserve the original Phase 1 balance criterion; restoring the Phase 1 model.")
+
+        if show_progress and phase2_pbar is not None:
+            phase2_pbar.close()
+
+    if show_progress and pbar is not None:
+        pbar.close()
+
     gps_model.eval()
     with torch.no_grad():
         final_gps = gps_model(Z_processed)
@@ -944,7 +1052,7 @@ def run_m_lbcnet(
         "lsd_by_treatment": lsd_summaries,
         "lsd_values": lsd_values.detach().cpu().numpy(),
         "epochs_run": int(epochs_run),
-        "early_stopping": bool(objective_converged),
+        "early_stopping": bool(early_stopping),
         "vae_weights_loaded": bool(vae_weights_loaded),
         "tensor_shapes": {
             "Z": [int(n_obs), int(processed_dim)],

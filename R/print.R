@@ -71,8 +71,7 @@ print.lbc_net <- function(x, ...) {
   cat("\n")
 
   cat("--- Stopping Criteria ---\n")
-  cat("Objective convergence: relative tolerance 1e-4 | absolute tolerance 1e-6\n")
-  cat("Checks: every 200 epochs | Patience: 5 | Minimum epochs: 2000\n")
+  cat(sprintf("LSD Threshold: %.2f%% | Rolling Window: %d\n", stopping_criteria$lsd_threshold, stopping_criteria$rolling_window))
   cat(sprintf("Max Training Epochs: %d\n", stopping_criteria$max_epochs))
   cat("\n")
   
@@ -154,12 +153,15 @@ print.m_lbcnet <- function(x, ...) {
   )
   criterion_achieved <- isTRUE(x$stopping_criteria$early_stopping)
   cat(
-    "Objective Convergence Achieved:",
+    "LSD Criterion Achieved:",
     if (criterion_achieved) "Yes" else "No", "\n"
   )
-  cat("Checks: every 200 epochs | Patience: 5 | Minimum epochs: 2000\n")
+  cat(
+    "LSD Threshold:", sprintf("%.2f%%", x$stopping_criteria$lsd_threshold),
+    "| Rolling Window:", x$stopping_criteria$rolling_window, "\n"
+  )
   if (!criterion_achieved) {
-    cat("Stopping Status: Maximum epochs reached before objective convergence.\n")
+    cat("Stopping Status: Maximum epochs reached; LSD criterion not achieved.\n")
   }
 
   if (!is.null(x$Y)) {

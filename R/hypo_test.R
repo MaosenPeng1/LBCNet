@@ -27,8 +27,11 @@
 #' @details
 #' This implementation applies to the current ATE inference framework.
 #' Let \eqn{\hat\mu} contain the marginal treatment mean estimates and let
-#' \eqn{V_\mu} be their stored joint covariance matrix. No covariance is
-#' reconstructed from marginal standard errors.
+#' \eqn{V_\mu} be their stored joint covariance matrix. The authoritative
+#' inputs are the Python post-processing outputs (`means`, `se_means`,
+#' `covariance_means`, and `pairwise_ate`) produced during fitting; R does
+#' not reconstruct a second effect or variance estimator from the marginal
+#' summaries.
 #'
 #' The global null is \eqn{H_0: \mu_1 = \cdots = \mu_L}. It uses
 #' `cbind(diag(L - 1), -rep(1, L - 1))`, comparing each of the first
@@ -175,13 +178,25 @@ hypo_test <- function(object, type = c("all", "global", "pairwise", "custom"),
 
   result <- list()
   if (type %in% c("all", "global")) {
-    C_global <- cbind(diag(n_treatments - 1L), -rep(1, n_treatments - 1L))
-    global <- .wald_test_mu(mu_hat, V_mu, C_global)
-    result$global <- data.frame(
-      hypothesis = "All treatment-specific means are equal",
-      statistic = global$statistic, df = global$df, p_value = global$p_value,
-      stringsAsFactors = FALSE
-    )
+    if (n_treatments == 2L && !is.null(object$effect) && is.finite(object$effect) &&
+        !is.null(object$se) && is.finite(object$se)) {
+      z_global <- object$effect / object$se
+      statistic <- z_global^2
+      p_value <- 2 * stats::pnorm(-abs(z_global))
+      result$global <- data.frame(
+        hypothesis = "All treatment-specific means are equal",
+        statistic = statistic, df = 1, p_value = p_value,
+        stringsAsFactors = FALSE
+      )
+    } else {
+      C_global <- cbind(diag(n_treatments - 1L), -rep(1, n_treatments - 1L))
+      global <- .wald_test_mu(mu_hat, V_mu, C_global)
+      result$global <- data.frame(
+        hypothesis = "All treatment-specific means are equal",
+        statistic = global$statistic, df = global$df, p_value = global$p_value,
+        stringsAsFactors = FALSE
+      )
+    }
   }
   if (type %in% c("all", "pairwise")) {
     pairs <- utils::combn(seq_len(n_treatments), 2L)
@@ -193,8 +208,18 @@ hypo_test <- function(object, type = c("all", "global", "pairwise", "custom"),
       contrast[1L, treatment_1] <- 1
       contrast[1L, treatment_2] <- -1
       tested <- .wald_test_mu(mu_hat, V_mu, contrast)
-      estimate <- tested$contrast_estimate[1L]
-      se <- sqrt(tested$contrast_covariance[1L, 1L])
+
+      # For binary ATE fits, the Python post-processing result is the sole
+      # source of truth. Use the same effect and SE as the stored summary ATE,
+      # so the statistic and p-value are consistent across global and pairwise tests.
+      if (n_treatments == 2L && !is.null(object$effect) && is.finite(object$effect) &&
+          !is.null(object$se) && is.finite(object$se)) {
+        estimate <- object$effect
+        se <- object$se
+      } else {
+        estimate <- tested$contrast_estimate[1L]
+        se <- sqrt(tested$contrast_covariance[1L, 1L])
+      }
       z <- estimate / se
       data.frame(
         treatment_1 = treatment_levels[treatment_1],
