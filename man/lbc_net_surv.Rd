@@ -176,8 +176,8 @@ recorded in the output object.}
     \item{`lsd_threshold`}{A numeric value defining the Phase 1 stopping criterion based on the Local Standardized mean Difference (LSD).
   The rolling average of the maximum local balance must fall below this threshold to trigger the early stop.
   Once Phase 1 stops, a brief Phase 2 refinement may be run at a lower learning rate. The default
-  `lsd_threshold = 10` is intentionally more permissive to allow continued refinement in settings with
-  moderate overlap or modest sample size.}
+  `lsd_threshold = 2` balances efficiency and precision. In cases of poor overlap or small
+  sample size, a more permissive threshold may be appropriate.}
 
     \item{`rolling_window`}{An integer specifying the number of recent epochs used to compute the rolling average of
   the maximum local balance. Default is `5`. The Phase 1 early-stopping mechanism is triggered when the rolling average

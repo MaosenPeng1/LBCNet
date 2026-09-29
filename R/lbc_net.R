@@ -165,8 +165,8 @@
 #'     \item{`lsd_threshold`}{A numeric value defining the Phase 1 stopping criterion based on the Local Standardized mean Difference (LSD).
 #'   The rolling average of the maximum local balance must fall below this threshold to trigger the early stop.
 #'   Once Phase 1 stops, a brief Phase 2 refinement may be run at a lower learning rate. The default
-#'   `lsd_threshold = 10` is intentionally more permissive to allow continued refinement in settings with
-#'   moderate overlap or modest sample size.}
+#'   `lsd_threshold = 2` balances efficiency and precision. In cases of poor overlap or small
+#'   sample size, a more permissive threshold may be appropriate.}
 #'
 #'     \item{`rolling_window`}{An integer specifying the number of recent epochs used to compute the rolling average of
 #'   the maximum local balance. Default is `5`. The Phase 1 early-stopping mechanism is triggered when the rolling average
@@ -408,7 +408,7 @@ lbc_net <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL, Y = NULL,
   balance_lambda <- if (!is.null(args$balance_lambda)) args$balance_lambda else 1.0
   alpha <- if (!is.null(args$alpha)) args$alpha else 0.01
   epsilon <- if (!is.null(args$epsilon)) args$epsilon else 0.001
-  lsd_threshold <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 10
+  lsd_threshold <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 2
   rolling_window <- if (!is.null(args$rolling_window)) args$rolling_window else 5
   
   # Load Python script

@@ -187,7 +187,7 @@ lbc_net_surv <- function(data = NULL, formula = NULL,
   balance_lambda    <- if (!is.null(args$balance_lambda)) args$balance_lambda else 1.0
   alpha             <- if (!is.null(args$alpha)) args$alpha else 0.01
   epsilon           <- if (!is.null(args$epsilon)) args$epsilon else 0.001
-  lsd_threshold     <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 10
+  lsd_threshold     <- if (!is.null(args$lsd_threshold)) args$lsd_threshold else 2
   rolling_window    <- if (!is.null(args$rolling_window)) args$rolling_window else 5
   
   ## 3. Load Python module for survival
