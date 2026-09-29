@@ -507,7 +507,7 @@ def joint_mean_inference(
     influence_centered = influence - influence.mean(dim=0, keepdim=True)
     covariance = (
         influence_centered.transpose(0, 1) @ influence_centered
-    ) / float(n_obs * n_obs)
+    ) / float(n_obs * (n_obs - 1))
     covariance = 0.5 * (covariance + covariance.transpose(0, 1))
     variances = torch.diagonal(covariance).clamp_min(0.0)
     se_means = torch.sqrt(variances)
@@ -886,7 +886,7 @@ def run_m_lbcnet(
         phase2_check_interval = 100
         phase2_max_epochs = 3000
         phase2_rel_tol = 1e-3
-        phase2_abs_tol = 1e-6
+        phase2_abs_tol = 1e-10
         phase2_patience = 5
         phase2_best_loss = None
         phase2_best_epoch = None

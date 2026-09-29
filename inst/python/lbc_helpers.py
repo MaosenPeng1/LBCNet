@@ -669,11 +669,11 @@ def plug_in_if(Y, T, p, estimand="ATE"):
 
 def lbc_net_moments(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, balance_lambda =1.0):
     """
-    Compute the per-observation influence-function contributions of the
-    LBC-Net moment conditions (local balance + calibration).
+    Compute observation-level LBC-Net moment contributions.
 
-    This function produces φ_i(θ) = ∂Q/∂p_i for each observation,
-    where Q is the unified LBC-Net loss:
+    This function produces m_i(θ) for each observation. The sample mean of
+    these contributions is used in the GMM / influence-function calculation.
+    The corresponding unified LBC-Net loss is:
 
         Q = E_k[ ||B_k||^2 + C_k^2 ]
 
@@ -746,7 +746,10 @@ def lbc_net_moments(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, 
 
     # φ_C (local calibration contributions), shape [N,K]
     phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / torch.sqrt(ck * (1 - ck))
-    phiC_scaled = balance_lambda * phiC
+    lambda_sqrt = torch.sqrt(torch.as_tensor(
+        balance_lambda, dtype=phiC.dtype, device=phiC.device
+    ))
+    phiC_scaled = lambda_sqrt * phiC
 
     # Flatten: concatenate (K*p) + K = K*(p+1) components
     phi_i = torch.cat([phiB.reshape(N, K * p), phiC_scaled], dim=1)
@@ -781,6 +784,7 @@ def if_var(
     kernel_id=0,    # pass-through for omega_calculate
     balance_lambda=1.0,
     alpha = 0.01,
+    return_joint=False,
 ):
     """
     Influence-function-based SE for an IPW estimand with LBC-Net PS.
@@ -828,11 +832,16 @@ def if_var(
         Scaling factor for calibration moments in the loss.
     alpha : float, default 0.01
         Small ridge penalty factor for stabilizing the chain correction.
+    return_joint : bool, default False
+        Also return treatment-specific means and their full nuisance-corrected
+        joint influence-function covariance.
 
     Returns
     -------
     se : torch.Tensor (scalar)
         Estimated standard error of the IPW estimand.
+        If ``return_joint`` is true, returns a dictionary containing this SE,
+        the marginal means, their corrected IF covariance, and the full IFs.
     """
 
     # --- forward pass for propensity, no graph needed here ---
@@ -891,7 +900,7 @@ def if_var(
     g_params = torch.autograd.grad(
         outputs=Delta,
         inputs=params,
-        retain_graph=False,
+        retain_graph=return_joint,
         allow_unused=False,
     )
     gvec = _flatten_grads(g_params)          # [dθ]
@@ -918,6 +927,39 @@ def if_var(
     phi_centered = phi - phi.mean()
     var = (phi_centered.pow(2).sum() / (N - 1)) / N        # Var(φ)/n
     se = torch.sqrt(var)                                   # scalar tensor
+
+    if return_joint:
+        means = []
+        influence_columns = []
+        for arm_estimand in ("mu1", "mu0"):
+            arm_mean = ipw_est(Y, T, p_graph, estimand=arm_estimand)
+            arm_grads = torch.autograd.grad(
+                outputs=arm_mean,
+                inputs=params,
+                retain_graph=(arm_estimand == "mu1"),
+                allow_unused=False,
+            )
+            arm_gvec = _flatten_grads(arm_grads)
+            arm_g_proj = (Vh @ arm_gvec)[mask]
+            arm_b = V_kept @ (
+                arm_g_proj / (S_kept**2 + lambda_adaptive)
+            )
+            arm_chain = -(psi_s @ M_s @ arm_b)
+            arm_phi = plug_in_if(Y, T, p.detach(), estimand=arm_estimand)
+            means.append(arm_mean.detach())
+            influence_columns.append(arm_chain + arm_phi)
+
+        influence = torch.stack(influence_columns, dim=1)
+        centered = influence - influence.mean(dim=0, keepdim=True)
+        covariance = (centered.T @ centered) / float(N * (N - 1))
+        covariance = 0.5 * (covariance + covariance.T)
+        return {
+            "se": se,
+            "means": torch.stack(means),
+            "se_means": torch.sqrt(torch.diagonal(covariance).clamp_min(0.0)),
+            "covariance_means": covariance,
+            "influence_functions": influence,
+        }
 
     return se
 

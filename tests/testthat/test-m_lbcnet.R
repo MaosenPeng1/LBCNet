@@ -769,7 +769,7 @@ test_that("joint outcome inference retains covariance and pairwise identities", 
   centered_if <- sweep(
     fit$influence_functions, 2, colMeans(fit$influence_functions)
   )
-  reconstructed <- crossprod(centered_if) / n^2
+  reconstructed <- crossprod(centered_if) / (n * (n - 1))
   expect_equal(reconstructed, fit$covariance, tolerance = 1e-6)
 })
 

@@ -96,7 +96,8 @@ def run_lbc_net_surv(
     lr : float, default 0.05
         Learning rate for LBC-Net training.
     weight_decay : float, default 1e-5
-        L2 regularization for optimizer.
+        Retained for backward compatibility; the optimizer uses zero effective
+        weight decay to match the primary LBC-Net estimator.
     balance_lambda : float, default 1.0
         Weight on calibration term in LBC-Net loss.
     alpha : float, default 0.01
@@ -199,7 +200,9 @@ def run_lbc_net_surv(
     # 5. Train LBC-Net propensity model
     # -----------------------------
     ps_model = lbc_net(p, hidden_dim, L, epsilon).to(device)
-    optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=weight_decay)
+    # Match the primary LBC-Net estimator: the balance/calibration objective is
+    # optimized without an additional parameter penalty.
+    optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=0.0)
     ps_model.load_vae_encoder_weights(vae_model.encoder.state_dict())
 
     lsd_window = []
@@ -336,6 +339,7 @@ def run_lbc_net_surv(
         t_grid = t_grid_t,
         ate=ate_flag,
         kernel_id=kernel_id,
+        balance_lambda=balance_lambda,
         alpha=alpha,
     )
 

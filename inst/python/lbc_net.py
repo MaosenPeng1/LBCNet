@@ -275,7 +275,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
         phase2_check_interval = 100
         phase2_max_epochs = 3000
         phase2_rel_tol = 1e-3
-        phase2_abs_tol = 1e-6
+        phase2_abs_tol = 1e-10
         phase2_patience = 5
         phase2_best_loss = None
         phase2_best_epoch = None
@@ -410,21 +410,11 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
             mu0 = ipw_est(Y, T, final_outputs, estimand="mu0")
             means = torch.stack([mu1, mu0], dim=0)
 
-            phi_mu1 = plug_in_if(Y, T, final_outputs, estimand="mu1")
-            phi_mu0 = plug_in_if(Y, T, final_outputs, estimand="mu0")
-            influence_means = torch.stack([phi_mu1, phi_mu0], dim=1)
-            influence_centered = influence_means - influence_means.mean(dim=0, keepdim=True)
-            covariance_means = (influence_centered.T @ influence_centered) / (Y.numel() ** 2)
-            se_means = torch.sqrt(torch.diagonal(covariance_means).clamp_min(0.0))
-
             result["means"] = means.detach().cpu().numpy().tolist()
-            result["se_means"] = se_means.detach().cpu().numpy().tolist()
-            result["covariance_means"] = covariance_means.detach().cpu().numpy()
-            result["influence_functions"] = influence_means.detach().cpu().numpy()
 
         # IF-based SE and CI only if requested 
         if compute_variance:
-            se_t = if_var(
+            joint = if_var(
                 ps_model,
                 T,
                 Y,
@@ -435,8 +425,15 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
                 ate=ate,
                 estimand=estimand,    
                 kernel_id=kernel_id,
+                balance_lambda=balance_lambda,
                 alpha=alpha,
+                return_joint=True,
             )
+            se_t = joint["se"]
+            for component in (
+                "means", "se_means", "covariance_means", "influence_functions"
+            ):
+                result[component] = joint[component].detach().cpu().numpy()
             # se_t may already be scalar; convert robustly
             se_val = float(
                 se_t.detach().cpu().item() if hasattr(se_t, "detach") else se_t
