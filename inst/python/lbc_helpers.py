@@ -353,13 +353,9 @@ def lbc_net_loss(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, bal
     B = (w.transpose(0, 1) @ V) / float(N)                  # [K, p]
 
     # Calibration moment: C_k = average_i w_ik * (A_i - p_i) / sqrt{ck_k (1 - ck_k)}
-    # C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (
-    #     float(N) * torch.sqrt(ck * (1 - ck))
-    # )  # [K]
     C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (
-            float(N) * (ck * (1 - ck))
-        )  # [K]
-    
+        float(N) * torch.sqrt(ck * (1 - ck))
+    )  # [K]
 
     # Stack [B_k, C_k] into D_k ∈ R^{p+1}
     C_scaled = torch.sqrt(torch.as_tensor(balance_lambda, dtype=C.dtype, device=C.device)) * C
@@ -749,8 +745,7 @@ def lbc_net_moments(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, 
     phiB = w.unsqueeze(2) * V.unsqueeze(1)
 
     # φ_C (local calibration contributions), shape [N,K]
-    # phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / torch.sqrt(ck * (1 - ck))
-    phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / (ck * (1 - ck))
+    phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / torch.sqrt(ck * (1 - ck))
     lambda_sqrt = torch.sqrt(torch.as_tensor(
         balance_lambda, dtype=phiC.dtype, device=phiC.device
     ))
