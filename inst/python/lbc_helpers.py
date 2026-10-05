@@ -301,6 +301,7 @@ def omega_calculate(propensity_scores, ck, h, kernel_id=0):
     # Apply bandwidth scaling (to adjust for different h values)
     return omega / h
 
+
 def lbc_net_loss(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, balance_lambda =1.0):
     """
     Unified LBC-Net loss combining local balance and calibration moments.
@@ -348,26 +349,87 @@ def lbc_net_loss(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, bal
     # d = P(A=a | X) under the “observed” treatment
     d = treatment * propensity_scores + (1 - treatment) * (1 - propensity_scores)
 
-    # Balance moment: B_k = average_i w_ik * ((2A_i - 1)/d_i) * Z_i
+    # Balance moment: B_k = sum_i w_ik * ((2A_i - 1)/d_i) * Z_i
     V = ((2 * treatment - 1) / d).unsqueeze(1) * Z          # [N, p]
-    B = (w.transpose(0, 1) @ V) / float(N)                  # [K, p]
+    B = w.transpose(0, 1) @ V                               # [K, p]
 
-    # Calibration moment: C_k = average_i w_ik * (A_i - p_i) / sqrt{ck_k (1 - ck_k)}
-    # C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (
-    #     float(N) * torch.sqrt(ck * (1 - ck))
-    # )  # [K]
-    C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (
-            float(N) * (ck * (1 - ck))
-        )  # [K]
+    # Calibration moment: C_k = sum_i w_ik * (A_i - p_i) / {ck_k (1 - ck_k)}
+    C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (ck * (1 - ck))  # [K]
 
     # Stack [B_k, C_k] into D_k ∈ R^{p+1}
-    C_scaled = torch.sqrt(torch.as_tensor(balance_lambda, dtype=C.dtype, device=C.device)) * C
+    C_scaled = balance_lambda * C
     D = torch.cat([B, C_scaled.unsqueeze(1)], dim=1) # [K, p+1]
 
     # Q = mean_k ||D_k||^2
     Q = (D * D).sum(dim=1).mean()
 
     return Q
+
+
+# def lbc_net_loss(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, balance_lambda =1.0):
+#     """
+#     Unified LBC-Net loss combining local balance and calibration moments.
+
+#     Parameters
+#     ----------
+#     propensity_scores : torch.Tensor, shape [N]
+#         Estimated propensity scores.
+#     treatment : torch.Tensor, shape [N]
+#         Binary treatment indicator (0/1).
+#     Z : torch.Tensor, shape [N, p]
+#         Covariate matrix (often Z_norm with intercept).
+#     ck : torch.Tensor, shape [K]
+#         Kernel centers.
+#     h : torch.Tensor, shape [K]
+#         Bandwidths.
+#     ate : int, default=1
+#         1 for ATE target, 0 for ATT target.
+#     kernel_id : int, default=0
+#         0 = Gaussian, 1 = Uniform, 2 = Epanechnikov.
+
+#     Returns
+#     -------
+#     torch.Tensor (scalar)
+#         The loss Q = E_k [ ||(B_k, C_k)||^2 ].
+#     """
+#     tiny = 1e-6
+
+#     # Kernel weights: shape [N, K]
+#     kernel_w = omega_calculate(propensity_scores, ck, h, kernel_id)
+#     kernel_w = torch.where(
+#         (torch.abs(kernel_w) < tiny) & (kernel_w != 0),
+#         torch.full_like(kernel_w, tiny),
+#         kernel_w
+#     )
+
+#     K = len(ck)          # number of kernels
+#     N, p = Z.shape       # N samples, p covariates
+
+#     # w*(p) = 1 (ATE) or w*(p) = p (ATT)
+#     w_star = torch.ones_like(propensity_scores) if ate == 1 else propensity_scores
+#     # Shape [N, K]
+#     w = kernel_w * w_star.unsqueeze(1)
+
+#     # d = P(A=a | X) under the “observed” treatment
+#     d = treatment * propensity_scores + (1 - treatment) * (1 - propensity_scores)
+
+#     # Balance moment: B_k = average_i w_ik * ((2A_i - 1)/d_i) * Z_i
+#     V = ((2 * treatment - 1) / d).unsqueeze(1) * Z          # [N, p]
+#     B = (w.transpose(0, 1) @ V) / float(N)                  # [K, p]
+
+#     # Calibration moment: C_k = average_i w_ik * (A_i - p_i) / sqrt{ck_k (1 - ck_k)}
+#     C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (
+#         float(N) * torch.sqrt(ck * (1 - ck))
+#     )  # [K]
+
+#     # Stack [B_k, C_k] into D_k ∈ R^{p+1}
+#     C_scaled = torch.sqrt(torch.as_tensor(balance_lambda, dtype=C.dtype, device=C.device)) * C
+#     D = torch.cat([B, C_scaled.unsqueeze(1)], dim=1) # [K, p+1]
+
+#     # Q = mean_k ||D_k||^2
+#     Q = (D * D).sum(dim=1).mean()
+
+#     return Q
 
 def lsd_cal(propensity_scores, treatment, Z, ck, h, kernel_id, ate=1):
     """
@@ -670,13 +732,102 @@ def plug_in_if(Y, T, p, estimand="ATE"):
 
     return phi
 
+# def lbc_net_moments(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, balance_lambda =1.0):
+#     """
+#     Compute observation-level LBC-Net moment contributions.
+
+#     This function produces m_i(θ) for each observation. The sample mean of
+#     these contributions is used in the GMM / influence-function calculation.
+#     The corresponding unified LBC-Net loss is:
+
+#         Q = E_k[ ||B_k||^2 + C_k^2 ]
+
+#     with:
+#       - B_k = local balance moment at kernel center c_k
+#       - C_k = calibration moment at c_k
+
+#     These per-observation gradients are needed to construct:
+#       - the plug-in term for influence functions,
+#       - the Jacobian-vector products required by if_var(),
+#       - the Hessian–vector implicit products.
+
+#     Parameters
+#     ----------
+#     propensity_scores : torch.Tensor, shape (N,)
+#         Estimated propensities p_i from the trained LBC-Net.
+#     treatment : torch.Tensor, shape (N,)
+#         Treatment assignment T_i ∈ {0,1}.
+#     Z : torch.Tensor, shape (N, p)
+#         Covariate matrix, typically Z_norm (with intercept).
+#     ck : torch.Tensor, shape (K,)
+#         Kernel center grid c_k ∈ (0,1).
+#     h : torch.Tensor, shape (K,)
+#         Bandwidths h_k for kernel smoothing.
+#     ate : {0,1}, default 1
+#         1 for ATE target, 0 for ATT target (affects moments).
+#     kernel_id : {0,1,2}, default 0
+#         Kernel type:
+#            0 = Gaussian
+#            1 = Uniform
+#            2 = Epanechnikov
+#     balance_lambda : float, default 1.0
+#         Scaling factor for calibration moments in the loss.
+
+#     Returns
+#     -------
+#     phi_i : torch.Tensor, shape (N, K*(p+1))
+#         For each observation i, concatenates:
+#           - local balance components for each kernel center (K*p entries)
+#           - local calibration components for each center (K entries)
+#         i.e., total K*(p+1) moment contributions.
+#     """
+#     tiny = 1e-6
+
+#     # Kernel weights ω(c_k, p_i)
+#     kernel_w = omega_calculate(propensity_scores, ck, h, kernel_id)
+#     kernel_w = torch.where(
+#         (torch.abs(kernel_w) < tiny) & (kernel_w != 0),
+#         torch.full_like(kernel_w, tiny),
+#         kernel_w,
+#     )
+
+#     N, p = Z.shape
+#     K = len(ck)
+
+#     # w*(p) = 1 (ATE) or w*(p) = p (ATT)
+#     w_star = torch.ones_like(propensity_scores) if ate == 1 else propensity_scores
+#     # Shape [N, K]
+#     w = kernel_w * w_star.unsqueeze(1)
+
+#     # d_i = T_i p_i + (1-T_i)(1-p_i)
+#     d = treatment * propensity_scores + (1 - treatment) * (1 - propensity_scores)
+
+#     # Local balance score:
+#     #   V_i = ((2T_i - 1)/d_i) Z_i
+#     V = ((2 * treatment - 1) / d).unsqueeze(1) * Z         # [N, p]
+
+#     # φ_B (local balance contributions), shape [N,K,p]
+#     phiB = w.unsqueeze(2) * V.unsqueeze(1)
+
+#     # φ_C (local calibration contributions), shape [N,K]
+#     phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / torch.sqrt(ck * (1 - ck))
+#     lambda_sqrt = torch.sqrt(torch.as_tensor(
+#         balance_lambda, dtype=phiC.dtype, device=phiC.device
+#     ))
+#     phiC_scaled = lambda_sqrt * phiC
+
+#     # Flatten: concatenate (K*p) + K = K*(p+1) components
+#     phi_i = torch.cat([phiB.reshape(N, K * p), phiC_scaled], dim=1)
+
+#     return phi_i
+
 def lbc_net_moments(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, balance_lambda =1.0):
     """
-    Compute observation-level LBC-Net moment contributions.
+    Compute the per-observation influence-function contributions of the
+    LBC-Net moment conditions (local balance + calibration).
 
-    This function produces m_i(θ) for each observation. The sample mean of
-    these contributions is used in the GMM / influence-function calculation.
-    The corresponding unified LBC-Net loss is:
+    This function produces φ_i(θ) = ∂Q/∂p_i for each observation,
+    where Q is the unified LBC-Net loss:
 
         Q = E_k[ ||B_k||^2 + C_k^2 ]
 
@@ -748,12 +899,8 @@ def lbc_net_moments(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, 
     phiB = w.unsqueeze(2) * V.unsqueeze(1)
 
     # φ_C (local calibration contributions), shape [N,K]
-    # phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / torch.sqrt(ck * (1 - ck))
     phiC = (w * (treatment - propensity_scores).unsqueeze(1)) / (ck * (1 - ck))
-    lambda_sqrt = torch.sqrt(torch.as_tensor(
-        balance_lambda, dtype=phiC.dtype, device=phiC.device
-    ))
-    phiC_scaled = lambda_sqrt * phiC
+    phiC_scaled = balance_lambda * phiC
 
     # Flatten: concatenate (K*p) + K = K*(p+1) components
     phi_i = torch.cat([phiB.reshape(N, K * p), phiC_scaled], dim=1)
