@@ -280,6 +280,9 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
         phase2_best_loss = None
         phase2_best_epoch = None
         phase2_best_state = None
+        phase2_converged = False
+        phase2_converged_state = None
+        phase2_converged_epoch = None
         phase2_previous_loss = None
         phase2_consecutive = 0
 
@@ -337,12 +340,16 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
                         phase2_consecutive = 0
 
                     if phase2_consecutive >= phase2_patience:
+                        phase2_converged = True
+                        phase2_converged_state = copy.deepcopy(ps_model.state_dict())
+                        phase2_converged_epoch = phase2_epoch
                         break
 
                 phase2_previous_loss = current_loss_value
 
-        if phase2_best_state is not None:
-            ps_model.load_state_dict(phase2_best_state)
+        phase2_candidate_state = phase2_converged_state if phase2_converged else phase2_best_state
+        if phase2_candidate_state is not None:
+            ps_model.load_state_dict(phase2_candidate_state)
             with torch.no_grad():
                 selected_outputs = ps_model(Z_norm).squeeze()
                 selected_lsd_max, selected_lsd_mean = lsd_cal(
@@ -376,12 +383,16 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
     # Compute Final Propensity Scores
     with torch.no_grad():
         final_outputs = ps_model(Z_norm).squeeze()
+        final_loss = lbc_net_loss(
+            final_outputs, T, Z_norm, ck, h, ate=ate,
+            kernel_id=kernel_id, balance_lambda=balance_lambda
+        )
         final_LSD_max, final_LSD_mean = lsd_cal(final_outputs, T, Z, ck, h, kernel_id, ate = ate)
         ps = final_outputs.detach().cpu().numpy()
 
     result = {
         "propensity_scores": ps.tolist(),
-        "total_loss": float(loss.item()),
+        "total_loss": float(final_loss.detach().cpu().item()),
         "max_lsd": float(final_LSD_max.item()),
         "mean_lsd": float(final_LSD_mean.item()),
     }
