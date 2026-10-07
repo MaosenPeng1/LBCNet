@@ -202,7 +202,7 @@ def run_lbc_net_surv(
     ps_model = lbc_net(p, hidden_dim, L, epsilon).to(device)
     # Match the primary LBC-Net estimator: the balance/calibration objective is
     # optimized without an additional parameter penalty.
-    optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=0.0)
     ps_model.load_vae_encoder_weights(vae_model.encoder.state_dict())
 
     lsd_window = []

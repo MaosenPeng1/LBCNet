@@ -348,13 +348,13 @@ def lbc_net_loss(propensity_scores, treatment, Z, ck, h, ate=1, kernel_id=0, bal
     # d = P(A=a | X) under the “observed” treatment
     d = treatment * propensity_scores + (1 - treatment) * (1 - propensity_scores)
 
-    # Balance moment: B_k = average_i w_ik * ((2A_i - 1)/d_i) * Z_i
+    # Balance moment: B_k = sum_i w_ik * ((2A_i - 1)/d_i) * Z_i
     V = ((2 * treatment - 1) / d).unsqueeze(1) * Z          # [N, p]
-    B = (w.transpose(0, 1) @ V) / float(N)                  # [K, p]
+    B = w.transpose(0, 1) @ V                  # [K, p]
 
-    # Calibration moment: C_k = average_i w_ik * (A_i - p_i) / sqrt{ck_k (1 - ck_k)}
+    # Calibration moment: C_k = sum_i w_ik * (A_i - p_i) / sqrt{ck_k (1 - ck_k)}
     C = (w.transpose(0, 1) @ (treatment - propensity_scores)) / (
-        float(N) * torch.sqrt(ck * (1 - ck))
+        torch.sqrt(ck * (1 - ck))
     )  # [K]
 
     # Stack [B_k, C_k] into D_k ∈ R^{p+1}

@@ -187,7 +187,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
 
     # Train LBC-Net Model
     ps_model = lbc_net(p, hidden_dim, L, epsilon).to(device)
-    optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = optim.Adam(ps_model.parameters(), lr=lr, weight_decay=0.0)
     ps_model.load_vae_encoder_weights(vae_model.encoder.state_dict())
 
     # LSD early stopping window
@@ -271,7 +271,7 @@ def run_lbc_net(data_df, Z_columns, T_column, Y_column, estimand, ck, h,
 
     if early_stopping and phase1_state is not None:
         phase2_lr = lr * 0.1
-        phase2_optimizer = optim.Adam(ps_model.parameters(), lr=phase2_lr, weight_decay=weight_decay)
+        phase2_optimizer = optim.Adam(ps_model.parameters(), lr=phase2_lr, weight_decay=0.0)
         phase2_check_interval = 100
         phase2_max_epochs = 3000
         phase2_rel_tol = 1e-3
