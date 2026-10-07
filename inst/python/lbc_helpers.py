@@ -921,9 +921,6 @@ def if_var(
 
     # Unscaled observation-level correction
     chain_per_obs = -(psi_i @ M @ b)
-    # S_i = ψ_i M (M^T M + λ I)^{-1} g  (implemented via scaled version)
-    S_chain = psi_i @ M @ b                              # [N]
-    chain_per_obs = -S_chain                               # [N]
 
     # --- total IF, variance, and SE ---
     phi = chain_per_obs + phi_ipw                          # [N]
@@ -947,7 +944,7 @@ def if_var(
             arm_b = V_kept @ (
                 arm_g_proj / (S_kept**2 + lambda_adaptive)
             )
-            arm_chain = -(psi_s @ M_s @ arm_b)
+            arm_chain = -(psi_i @ M @ arm_b)
             arm_phi = plug_in_if(Y, T, p.detach(), estimand=arm_estimand)
             means.append(arm_mean.detach())
             influence_columns.append(arm_chain + arm_phi)
