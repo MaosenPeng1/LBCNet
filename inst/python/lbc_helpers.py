@@ -888,13 +888,6 @@ def if_var(
         rows.append(_flatten_grads(grads_j))
     M = torch.stack(rows, dim=0)     # [q, dθ]
 
-    # --- Stabilize by scaling columns of ψ and corresponding rows of M ---
-    with torch.no_grad():
-        col_scale = psi_i.std(dim=0) + 1e-8  # [q]
-
-    psi_s = psi_i / col_scale                # [N, q]
-    M_s   = M / col_scale.unsqueeze(1)       # [q, dθ]
-
     # --- exact gradient g = ∂Δ/∂θ for chosen estimand ---
     Delta = ipw_est(Y, T, p_graph, estimand=estimand)  # scalar
     g_params = torch.autograd.grad(
@@ -906,20 +899,30 @@ def if_var(
     gvec = _flatten_grads(g_params)          # [dθ]
 
     # --- chain correction: -ψ_i M (M^T M)^{-1} g using SVD-based ridge ---
-    U, S, Vh = torch.linalg.svd(M_s, full_matrices=False)  # M_s = U Σ V^T
-    tau = 1e-3 * S.max()                                   # spectral floor
-    mask = (S >= tau)
+    # --- SVD of the unscaled moment Jacobian ---
+    U, S, Vh = torch.linalg.svd(M, full_matrices=False)
+
+    # Relative singular-value cutoff: c = 10^{-3}
+    sv_cutoff = 1e-3 * S.max()
+    mask = (S > 0) & (S >= sv_cutoff)
+
     S_kept = S[mask]
     V_kept = Vh[mask].T
     g_proj = (Vh @ gvec)[mask]
 
-    lambda_adaptive = alpha * (S_kept**2).mean()
+    # Manuscript ridge: alpha * tr(M.T @ M) / d_theta
+    # Use all singular values, before truncation.
+    lambda_adaptive = alpha * S.square().sum() / M.shape[1]
 
-    # Ridge in singular space: b = V ( (V^T g) / (Σ^2 + λ) )
-    b = V_kept @ (g_proj / (S_kept**2 + lambda_adaptive))  # [dθ]
+    # b = B_{tau,c} @ target_gradient
+    b = V_kept @ (
+        g_proj / (S_kept.square() + lambda_adaptive)
+    )
 
+    # Unscaled observation-level correction
+    chain_per_obs = -(psi_i @ M @ b)
     # S_i = ψ_i M (M^T M + λ I)^{-1} g  (implemented via scaled version)
-    S_chain = psi_s @ M_s @ b                              # [N]
+    S_chain = psi_i @ M @ b                              # [N]
     chain_per_obs = -S_chain                               # [N]
 
     # --- total IF, variance, and SE ---
