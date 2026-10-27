@@ -397,7 +397,7 @@ def joint_mean_inference(
     h: torch.Tensor,
     kernel_id: int = 0,
     balance_lambda: float = 1.0,
-    alpha: float = 0.01,
+    alpha: float = 0.001,
 ) -> Dict[str, object]:
     """Joint IF inference using one shared nuisance IF and distinct H_t rows."""
     if not math.isfinite(float(alpha)) or alpha < 0:
@@ -642,7 +642,7 @@ def run_m_lbcnet(
     balance_lambda: float = 1.0,
     epsilon: float = 0.001,
     lsd_threshold: float = 2.0,
-    alpha: float = 0.01,
+    alpha: float = 0.001,
     rolling_window: int = 5,
     show_progress: bool = True,
     compute_variance: bool = True,

@@ -783,7 +783,7 @@ def if_var(
     estimand="ATE", # {"ATE","ATT","Y"} – affects moments and Δ
     kernel_id=0,    # pass-through for omega_calculate
     balance_lambda=1.0,
-    alpha = 0.01,
+    alpha = 0.001,
     return_joint=False,
 ):
     """
@@ -830,7 +830,7 @@ def if_var(
         Kernel type: 0=Gaussian, 1=Uniform, 2=Epanechnikov.
     balance_lambda : float, default 1.0
         Scaling factor for calibration moments in the loss.
-    alpha : float, default 0.01
+    alpha : float, default 0.001
         Small ridge penalty factor for stabilizing the chain correction.
     return_joint : bool, default False
         Also return treatment-specific means and their full nuisance-corrected
@@ -1212,7 +1212,7 @@ def if_var_surv(
     ate=1,
     kernel_id=0,
     balance_lambda=1.0,
-    alpha = 0.01,
+    alpha = 0.001,
 ):
     """
     Influence-function-based variance for the survival difference Δ(t) over a grid.
@@ -1248,7 +1248,7 @@ def if_var_surv(
         Kernel identifier (0 = Gaussian, 1 = Uniform, 2 = Epanechnikov).
     balance_lambda : float, default 1.0
         Scaling factor for calibration moments in the LBC-Net loss.
-    alpha : float, default 0.01
+    alpha : float, default 0.001
         Small ridge penalty factor for stabilizing the chain correction.
 
     Returns

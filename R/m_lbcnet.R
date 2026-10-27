@@ -127,7 +127,7 @@ m_lbcnet <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   lr <- if (is.null(args$lr)) 0.05 else args$lr
   weight_decay <- if (is.null(args$weight_decay)) 1e-5 else args$weight_decay
   balance_lambda <- if (is.null(args$balance_lambda)) 1 else args$balance_lambda
-  alpha <- if (is.null(args$alpha)) 0.01 else args$alpha
+  alpha <- if (is.null(args$alpha)) 0.001 else args$alpha
   epsilon <- if (is.null(args$epsilon)) 0.001 else args$epsilon
   lsd_threshold <- if (is.null(args$lsd_threshold)) 2 else args$lsd_threshold
   rolling_window <- if (is.null(args$rolling_window)) 5L else args$rolling_window

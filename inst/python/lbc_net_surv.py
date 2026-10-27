@@ -42,7 +42,7 @@ def run_lbc_net_surv(
     lr=0.05,
     weight_decay=1e-5,
     balance_lambda=1.0,
-    alpha=0.01,
+    alpha=0.001,
     epsilon=0.001,
     lsd_threshold=2,
     rolling_window=5,
@@ -100,7 +100,7 @@ def run_lbc_net_surv(
         weight decay to match the primary LBC-Net estimator.
     balance_lambda : float, default 1.0
         Weight on calibration term in LBC-Net loss.
-    alpha : float, default 0.01
+    alpha : float, default 0.001
         Small ridge penalty factor for stabilizing the chain correction.
     epsilon : float, default 0.001
         Propensity score bounding parameter.

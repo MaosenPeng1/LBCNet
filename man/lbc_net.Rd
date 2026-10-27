@@ -164,7 +164,7 @@ the follow-up Phase 2 refinement stage. Set to `FALSE` to disable the display.}
   \eqn{Q = Q_1 + \lambda Q_2}. Default is `1.0`. }
   
     \item{alpha}{Nonnegative regularization parameter controlling numerical stabilization of the estimator.
-  The default value \code{alpha = 0.01} provides stable estimation and near-nominal inference
+  The default value \code{alpha = 0.001} provides stable estimation and near-nominal inference
   across a wide range of settings. Values in the range \code{[1e-4, 1e-1]} generally yield
   similar results; larger values may induce overly conservative variance estimates.}
 
