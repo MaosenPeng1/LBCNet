@@ -397,11 +397,25 @@ def joint_mean_inference(
     h: torch.Tensor,
     kernel_id: int = 0,
     balance_lambda: float = 1.0,
-    alpha: float = 0.001,
+    alpha: float = 0.01,
 ) -> Dict[str, object]:
-    """Joint IF inference using one shared nuisance IF and distinct H_t rows."""
+    """Joint IF inference using one shared nuisance IF and distinct H_t rows.
+
+    Alpha has fixed default 0.01, recommended for N < 10,000. For N >= 10,000,
+    alpha=0.001 may be preferable for IF-based variance estimation. IF inference
+    prints an informational message when N >= 10,000 and alpha=0.01 (including
+    an explicit 0.01). Alpha is never changed automatically; any valid value
+    may be supplied.
+    """
     if not math.isfinite(float(alpha)) or alpha < 0:
         raise ValueError("alpha must be finite and nonnegative.")
+
+    if Z_processed.shape[0] >= 10000 and alpha == 0.01:
+        print(
+            "For N >= 10,000, alpha = 0.001 may be preferable for IF-based "
+            "variance estimation. The supplied alpha = 0.01 is unchanged; "
+            "set alpha manually to override it."
+        )
 
     model.eval()
     params = tuple(param for param in model.parameters() if param.requires_grad)
@@ -642,12 +656,19 @@ def run_m_lbcnet(
     balance_lambda: float = 1.0,
     epsilon: float = 0.001,
     lsd_threshold: float = 2.0,
-    alpha: float = 0.001,
+    alpha: float = 0.01,
     rolling_window: int = 5,
     show_progress: bool = True,
     compute_variance: bool = True,
 ) -> Dict[str, object]:
-    """Fit one joint M-LBCNet GPS and, when requested, joint ATE inference."""
+    """Fit one joint M-LBCNet GPS and, when requested, joint ATE inference.
+
+    Alpha has fixed default 0.01, recommended for N < 10,000. For N >= 10,000,
+    alpha=0.001 may be preferable for IF-based variance estimation. IF inference
+    prints an informational message when N >= 10,000 and alpha=0.01 (including
+    an explicit 0.01). Alpha is never changed automatically; any valid value
+    may be supplied.
+    """
     kernel_ids = {"gaussian": 0, "uniform": 1, "epanechnikov": 2}
     if kernel not in kernel_ids:
         raise ValueError(

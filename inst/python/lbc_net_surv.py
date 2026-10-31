@@ -42,7 +42,7 @@ def run_lbc_net_surv(
     lr=0.05,
     weight_decay=1e-5,
     balance_lambda=1.0,
-    alpha=0.001,
+    alpha=0.01,
     epsilon=0.001,
     lsd_threshold=2,
     rolling_window=5,
@@ -100,8 +100,13 @@ def run_lbc_net_surv(
         weight decay to match the primary LBC-Net estimator.
     balance_lambda : float, default 1.0
         Weight on calibration term in LBC-Net loss.
-    alpha : float, default 0.001
+    alpha : float, default 0.01
         Small ridge penalty factor for stabilizing the chain correction.
+        The fixed default 0.01 is recommended for N < 10,000. For N >= 10,000,
+        alpha=0.001 may be preferable for IF-based variance estimation. IF
+        inference prints an informational message when N >= 10,000 and
+        alpha=0.01 (including an explicit 0.01). Alpha is never changed
+        automatically; any valid value may be supplied.
     epsilon : float, default 0.001
         Propensity score bounding parameter.
     lsd_threshold : float, default 2

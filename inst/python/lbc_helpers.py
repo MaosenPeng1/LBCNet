@@ -783,7 +783,7 @@ def if_var(
     estimand="ATE", # {"ATE","ATT","Y"} – affects moments and Δ
     kernel_id=0,    # pass-through for omega_calculate
     balance_lambda=1.0,
-    alpha = 0.001,
+    alpha = 0.01,
     return_joint=False,
 ):
     """
@@ -830,8 +830,13 @@ def if_var(
         Kernel type: 0=Gaussian, 1=Uniform, 2=Epanechnikov.
     balance_lambda : float, default 1.0
         Scaling factor for calibration moments in the loss.
-    alpha : float, default 0.001
+    alpha : float, default 0.01
         Small ridge penalty factor for stabilizing the chain correction.
+        The fixed default 0.01 is recommended for N < 10,000. For N >= 10,000,
+        alpha=0.001 may be preferable for IF-based variance estimation. IF
+        inference prints an informational message when N >= 10,000 and
+        alpha=0.01 (including an explicit 0.01). Alpha is never changed
+        automatically; any valid value may be supplied.
     return_joint : bool, default False
         Also return treatment-specific means and their full nuisance-corrected
         joint influence-function covariance.
@@ -861,6 +866,12 @@ def if_var(
         balance_lambda=balance_lambda
     )                                # [N, q]
     N, q = psi_i.shape
+    if N >= 10000 and alpha == 0.01:
+        print(
+            "For N >= 10,000, alpha = 0.001 may be preferable for IF-based "
+            "variance estimation. The supplied alpha = 0.01 is unchanged; "
+            "set alpha manually to override it."
+        )
 
     # Now, rebuild ψ_i with graph-enabled p(θ) so that we can differentiate.
     p_graph = model(Z).squeeze()     # [N], graph-enabled
@@ -1212,7 +1223,7 @@ def if_var_surv(
     ate=1,
     kernel_id=0,
     balance_lambda=1.0,
-    alpha = 0.001,
+    alpha = 0.01,
 ):
     """
     Influence-function-based variance for the survival difference Δ(t) over a grid.
@@ -1248,8 +1259,13 @@ def if_var_surv(
         Kernel identifier (0 = Gaussian, 1 = Uniform, 2 = Epanechnikov).
     balance_lambda : float, default 1.0
         Scaling factor for calibration moments in the LBC-Net loss.
-    alpha : float, default 0.001
+    alpha : float, default 0.01
         Small ridge penalty factor for stabilizing the chain correction.
+        The fixed default 0.01 is recommended for N < 10,000. For N >= 10,000,
+        alpha=0.001 may be preferable for IF-based variance estimation. IF
+        inference prints an informational message when N >= 10,000 and
+        alpha=0.01 (including an explicit 0.01). Alpha is never changed
+        automatically; any valid value may be supplied.
 
     Returns
     -------
@@ -1273,6 +1289,12 @@ def if_var_surv(
         balance_lambda=balance_lambda,
     )  # [N, q]
     N, q = psi_i.shape
+    if N >= 10000 and alpha == 0.01:
+        print(
+            "For N >= 10,000, alpha = 0.001 may be preferable for IF-based "
+            "variance estimation. The supplied alpha = 0.01 is unchanged; "
+            "set alpha manually to override it."
+        )
 
     # --- Jacobian M = ∂ mbar / ∂θ via autograd (only once, shared for all times) ---
     # Now, rebuild ψ_i with graph-enabled p(θ) so that we can differentiate.

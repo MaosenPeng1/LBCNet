@@ -163,9 +163,11 @@ recorded in the output object.}
   \eqn{Q = Q_1 + \lambda Q_2}. Default is `1.0`. }
   
     \item{alpha}{Nonnegative regularization parameter controlling numerical stabilization of the estimator.
-  The default value \code{alpha = 0.001} provides stable estimation and near-nominal inference
-  across a wide range of settings. Values in the range \code{[1e-4, 1e-1]} generally yield
-  similar results; larger values may induce overly conservative variance estimates.}
+  The fixed default is \code{alpha = 0.01}, recommended for \eqn{N < 10,000}.
+  For IF-based variance estimation with \eqn{N \ge 10,000}, a smaller value
+  \code{alpha = 0.001} may be preferable. An informational message is displayed
+  in this case when \code{alpha = 0.01}, including when explicitly supplied.
+  The parameter is never changed automatically; any valid value may be supplied.}
 
     \item{`epsilon`}{A small numeric value controlling the lower and upper bounds of the
   estimated propensity scores. The default is `0.001`. Positive values keep

@@ -70,7 +70,12 @@
 #'   \code{compute_variance}. A supplied \code{h} may be a length-\code{K}
 #'   vector or an \eqn{L} by \eqn{K} matrix and skips pilot estimation. The
 #'   default is \code{epsilon = 0.001}; setting \code{epsilon = 0} disables the
-#'   probability floor.
+#'   probability floor. The nonnegative IF regularization parameter has fixed
+#'   default \code{alpha = 0.01}, recommended for \eqn{N < 10,000}. For
+#'   \eqn{N \ge 10,000}, \code{alpha = 0.001} may be preferable for IF-based
+#'   variance estimation. An informational message is displayed during IF inference
+#'   when \code{alpha = 0.01}, including when explicitly supplied. The parameter
+#'   is never changed automatically; any valid value may be supplied.
 #' @param setup_lbcnet_args List passed to \code{\link{setup_lbcnet}} when
 #'   Python is not already set up.
 #'
@@ -127,7 +132,7 @@ m_lbcnet <- function(data = NULL, formula = NULL, Z = NULL, Tr = NULL,
   lr <- if (is.null(args$lr)) 0.05 else args$lr
   weight_decay <- if (is.null(args$weight_decay)) 1e-5 else args$weight_decay
   balance_lambda <- if (is.null(args$balance_lambda)) 1 else args$balance_lambda
-  alpha <- if (is.null(args$alpha)) 0.001 else args$alpha
+  alpha <- if (is.null(args$alpha)) 0.01 else args$alpha
   epsilon <- if (is.null(args$epsilon)) 0.001 else args$epsilon
   lsd_threshold <- if (is.null(args$lsd_threshold)) 2 else args$lsd_threshold
   rolling_window <- if (is.null(args$rolling_window)) 5L else args$rolling_window
